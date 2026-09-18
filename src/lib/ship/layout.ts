@@ -1,7 +1,7 @@
-import type { LineResult } from "@/lib/cdc/types.ts";
-import { hasExplicitLqMarks, isLimitedQty } from "@/lib/cdc/limited.ts";
+import type { LineResult } from "../cdc/types.ts";
+import { isLimitedQty } from "../cdc/limited.ts";
 import { HATCHES, hatchSpec, imdgAllowed, type HatchSpec } from "./george-ii.ts";
-import { parseStow, type StowPos } from "./stow.ts";
+import { containerKey, parseStow, type StowPos } from "./stow.ts";
 
 export interface DgLine {
   line: LineResult;
@@ -28,6 +28,9 @@ export interface ContainerSlot {
   box?: import("../baplie/types.ts").BaplieBox;
   reefer?: boolean;
   operating?: boolean;
+  conflict?: boolean;
+  ghost?: boolean;
+  mismatch?: boolean;
 }
 
 export function dgLines(lines: LineResult[]): DgLine[] {
@@ -41,7 +44,7 @@ export function hatchBuckets(lines: LineResult[]): HatchBucket[] {
   return HATCHES.map((spec) => {
     const mine = all.filter((d) => d.stow?.hatch === spec.id);
     const classes = [...new Set(mine.map((d) => d.line.hazClass).filter(Boolean))].sort();
-    const containers = new Set(mine.map((d) => d.line.input.container).filter(Boolean)).size;
+    const containers = new Set(mine.map((d) => containerKey(d.line.input.container) || d.line.input.container).filter(Boolean)).size;
     return {
       spec,
       lines: mine,
@@ -63,7 +66,7 @@ export function unstowed(lines: LineResult[]): DgLine[] {
 export function containersOnHatch(bucket: HatchBucket): ContainerSlot[] {
   const map = new Map<string, ContainerSlot>();
   for (const d of bucket.lines) {
-    const cn = (d.line.input.container || "").toUpperCase() || `row-${d.line.input.rowIndex}`;
+    const cn = containerKey(d.line.input.container) || `row-${d.line.input.rowIndex}`;
     const cur = map.get(cn) ?? {
       key: cn,
       container: d.line.input.container || "No container no.",
@@ -78,16 +81,17 @@ export function containersOnHatch(bucket: HatchBucket): ContainerSlot[] {
     const ta = a.stow?.tier ?? 0;
     const tb = b.stow?.tier ?? 0;
     if (ta !== tb) return ta - tb;
-    return (a.stow?.row ?? 0) - (b.stow?.row ?? 0);
+    const ra = (a.stow?.row ?? 0) - (b.stow?.row ?? 0);
+    if (ra) return ra;
+    return (a.stow?.bay ?? 0) - (b.stow?.bay ?? 0);
   });
 }
 
 export function hatchWarnings(bucket: HatchBucket): string[] {
   const out: string[] = [...bucket.spec.notes];
-  const cartonFallback = !hasExplicitLqMarks(bucket.lines.map((d) => d.line));
   for (const d of bucket.lines) {
     if (!d.stow) continue;
-    if (isLimitedQty(d.line, cartonFallback)) continue;
+    if (isLimitedQty(d.line)) continue;
     const cls = d.line.hazClass;
     if (!imdgAllowed(bucket.spec, cls, d.stow.onDeck)) {
       out.push(

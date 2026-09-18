@@ -4,23 +4,25 @@ import { evaluateManifest } from "../cdc/evaluate.ts";
 import { CONTAINER_OPTIONS, type LineInput } from "../cdc/types.ts";
 import { screenVoyage, segregationCode } from "./segregation.ts";
 import { athwartGap, isCasingCell } from "./george-ii.ts";
+import { parseStow } from "./stow.ts";
+import { parseBaplie } from "../baplie/parse.ts";
 
 function line(partial: Partial<LineInput> & Pick<LineInput, "un" | "hazClass">): LineInput {
   return {
     rowIndex: partial.rowIndex ?? 1,
     name: partial.name ?? "TEST",
     subsidiary: partial.subsidiary ?? "",
-    packaging: partial.packaging ?? "CN",
+    packaging: partial.packaging ?? "6 PA",
     packingGroup: partial.packingGroup ?? "II",
-    quantityKg: partial.quantityKg ?? 100,
-    quantityRaw: partial.quantityRaw ?? "100 kg",
+    quantityKg: partial.quantityKg ?? 200,
+    quantityRaw: partial.quantityRaw ?? "200 kg",
     raw: [],
     ...partial,
   };
 }
 
-function screen(lines: LineInput[]) {
-  return screenVoyage(evaluateManifest(lines, CONTAINER_OPTIONS).lines);
+function screen(lines: LineInput[], plan?: ReturnType<typeof parseBaplie>) {
+  return screenVoyage(evaluateManifest(lines, CONTAINER_OPTIONS).lines, plan ?? null);
 }
 
 describe("176.83 table", () => {
@@ -43,14 +45,14 @@ describe("GEORGE II location", () => {
 
   it("blocks class 8 below deck on Hatch 1 (not Hold 2)", () => {
     const r = screen([
-      line({ un: "2794", hazClass: "8", container: "ABCD1234567", stowLoc: "0020104" }),
+      line({ un: "2794", hazClass: "8", container: "ABCD1234567", stowLoc: "0020104", packaging: "10 DR", quantityKg: 200 }),
     ]);
     assert.ok(r.issues.some((i) => /below deck on Hatch 1/i.test(i.title)));
   });
 
   it("allows class 8 in Hold 2", () => {
     const r = screen([
-      line({ un: "2794", hazClass: "8", container: "ABCD1234567", stowLoc: "0100104" }),
+      line({ un: "2794", hazClass: "8", container: "ABCD1234567", stowLoc: "0100104", packaging: "10 DR", quantityKg: 200 }),
     ]);
     assert.equal(r.blocks, 0);
   });
@@ -76,7 +78,7 @@ describe("segregation distances", () => {
   it("does not flag paint next to class 8 on the same hatch", () => {
     const r = screen([
       line({ un: "1263", hazClass: "3", container: "AAAA1111111", stowLoc: "0180184", packaging: "6 PA", quantityKg: 200 }),
-      line({ un: "2794", hazClass: "8", container: "BBBB2222222", stowLoc: "0180284" }),
+      line({ un: "2794", hazClass: "8", container: "BBBB2222222", stowLoc: "0180284", packaging: "10 DR", quantityKg: 200 }),
     ]);
     assert.equal(r.segs, 0);
   });
@@ -108,7 +110,41 @@ describe("segregation distances", () => {
   it("does not flag Away-from (1) classes sharing a closed container", () => {
     const r = screen([
       line({ un: "1075", hazClass: "2.1", container: "AWAY0000001", stowLoc: "0180184", packaging: "40 CS", quantityKg: 400 }),
-      line({ un: "2794", hazClass: "8", container: "AWAY0000001", stowLoc: "0180184" }),
+      line({ un: "2794", hazClass: "8", container: "AWAY0000001", stowLoc: "0180184", packaging: "10 DR", quantityKg: 200 }),
+    ]);
+    assert.equal(r.segs, 0, JSON.stringify(r.issues));
+  });
+});
+
+describe("separated from (2) geometry", () => {
+  it("does not flag 20' fwd vs 20' aft on the same hatch (017 vs 019)", () => {
+    const r = screen([
+      line({ un: "1075", hazClass: "2.1", container: "FWD200000001", stowLoc: "0170184", packaging: "40 CS", quantityKg: 400 }),
+      line({ un: "1477", hazClass: "5.1", container: "AFT200000002", stowLoc: "0190184", packaging: "10 DR", quantityKg: 400 }),
+    ]);
+    assert.equal(r.segs, 0, JSON.stringify(r.issues));
+  });
+
+  it("flags neighbors athwart in the same 40' bay", () => {
+    const r = screen([
+      line({ un: "1075", hazClass: "2.1", container: "ROW100000001", stowLoc: "0180184", packaging: "40 CS", quantityKg: 400 }),
+      line({ un: "1477", hazClass: "5.1", container: "ROW200000002", stowLoc: "0180284", packaging: "10 DR", quantityKg: 400 }),
+    ]);
+    assert.ok(r.segs >= 1, JSON.stringify(r.issues));
+  });
+
+  it("flags adjacent hatch covers on deck (Hatch 4 vs Hatch 5)", () => {
+    const r = screen([
+      line({ un: "1075", hazClass: "2.1", container: "H4CK0000001", stowLoc: "0140184", packaging: "40 CS", quantityKg: 400 }),
+      line({ un: "1477", hazClass: "5.1", container: "H5CK0000001", stowLoc: "0180184", packaging: "10 DR", quantityKg: 400 }),
+    ]);
+    assert.ok(r.segs >= 1, JSON.stringify(r.issues));
+  });
+
+  it("does not flag a vertical gap of two tier steps (82 vs 88)", () => {
+    const r = screen([
+      line({ un: "1075", hazClass: "2.1", container: "LOW00000001", stowLoc: "0180182", packaging: "40 CS", quantityKg: 400 }),
+      line({ un: "1477", hazClass: "5.1", container: "HIGH0000001", stowLoc: "0180188", packaging: "10 DR", quantityKg: 400 }),
     ]);
     assert.equal(r.segs, 0, JSON.stringify(r.issues));
   });
@@ -120,13 +156,19 @@ describe("athwartships and Hatch 10 casing", () => {
     assert.equal(athwartGap(5, true, 1, 2), 1);
   });
 
-  it("watches Hatch 10 inboard casing cells only", () => {
-    assert.equal(isCasingCell(10, 2), true);
+  it("watches Hatch 10 inboard casing cells 04 and 03 only", () => {
+    assert.equal(isCasingCell(10, 2), false);
+    assert.equal(isCasingCell(10, 4), true);
+    assert.equal(isCasingCell(10, 3), true);
     assert.equal(isCasingCell(10, 12), false);
     const watch = screen([
-      line({ un: "3480", hazClass: "9", container: "CASE0000001", stowLoc: "0380284", packaging: "8 BX", quantityKg: 400 }),
+      line({ un: "3480", hazClass: "9", container: "CASE0000001", stowLoc: "0380484", packaging: "8 BX", quantityKg: 400 }),
     ]);
     assert.ok(watch.watches >= 1, JSON.stringify(watch.issues));
+    const starboard = screen([
+      line({ un: "3480", hazClass: "9", container: "CASE0000002", stowLoc: "0380384", packaging: "8 BX", quantityKg: 400 }),
+    ]);
+    assert.ok(starboard.watches >= 1, JSON.stringify(starboard.issues));
     const outboard = screen([
       line({ un: "3480", hazClass: "9", container: "OUTB0000001", stowLoc: "0381284", packaging: "8 BX", quantityKg: 400 }),
     ]);
@@ -179,5 +221,66 @@ describe("limited quantity", () => {
       }),
     ]);
     assert.equal(r.blocks, 0, JSON.stringify(r.issues));
+  });
+});
+
+describe("BAPLIE stow copy and slot overlap", () => {
+  it("copies BAPLIE LOC+147 onto a DCM line with empty stow", () => {
+    const edi = `UNA:+.? '
+UNB+UNOA:2+PASHA+GEORGEII+260918:1200+1'
+UNH+1+BAPLIE:D:95B:UN:SMDG22'
+BGM+34+T+9'
+TDT+20+T+1++PHK:172:20+++8012487:103:GEORGE II'
+LOC+147+0180284:139:5'
+EQD+CN+ABCD1234567+45G1:102:5++2+5'
+UNT+10+1'
+UNZ+1+1'
+`;
+    const plan = parseBaplie(edi, "copy.edi");
+    const evaluated = evaluateManifest(
+      [line({ un: "1263", hazClass: "3", container: "ABCD1234567", packaging: "6 PA", quantityKg: 200 })],
+      CONTAINER_OPTIONS,
+    );
+    const r = screenVoyage(evaluated.lines, plan);
+    const pos = parseStow(evaluated.lines[0].input.stowLoc);
+    assert.equal(pos?.hatch, 5, JSON.stringify(pos));
+    assert.equal(pos?.row, 2);
+    assert.equal(pos?.tier, 84);
+    assert.equal(r.issues.filter((i) => /pick one/i.test(i.title)).length, 0);
+  });
+
+  it("watches when DCM and BAPLIE stow disagree and does not self-segregate", () => {
+    const edi = `UNA:+.? '
+UNB+UNOA:2+PASHA+GEORGEII+260918:1200+1'
+UNH+1+BAPLIE:D:95B:UN:SMDG22'
+BGM+34+T+9'
+LOC+147+0300184:139:5'
+EQD+CN+ABCD1234567+45G1:102:5++2+5'
+DGS+IMD+3+1263+III'
+UNT+10+1'
+UNZ+1+1'
+`;
+    const plan = parseBaplie(edi, "mismatch.edi");
+    const r = screen([
+      line({ un: "1263", hazClass: "3", container: "ABCD1234567", stowLoc: "14-08-84", packaging: "6 PA", quantityKg: 200 }),
+    ], plan);
+    assert.ok(r.issues.some((i) => /DCM stow 14-08-84 vs BAPLIE 0300184/i.test(i.title)), JSON.stringify(r.issues));
+    assert.equal(r.segs, 0, JSON.stringify(r.issues));
+  });
+
+  it("blocks a 40' and a 20' that share the same footprint", () => {
+    const r = screen([
+      line({ un: "1263", hazClass: "3", container: "FORTY000001", stowLoc: "0180284", packaging: "6 PA", quantityKg: 200 }),
+      line({ un: "2794", hazClass: "8", container: "TWENT000001", stowLoc: "0170284", packaging: "10 DR", quantityKg: 200 }),
+    ]);
+    assert.ok(r.issues.some((i) => /two boxes in one slot/i.test(i.title)), JSON.stringify(r.issues));
+  });
+
+  it("does not treat opposite 20' ends of a hatch as the same slot", () => {
+    const r = screen([
+      line({ un: "1263", hazClass: "3", container: "FWD200000001", stowLoc: "0170284", packaging: "6 PA", quantityKg: 200 }),
+      line({ un: "2794", hazClass: "8", container: "AFT200000002", stowLoc: "0190284", packaging: "10 DR", quantityKg: 200 }),
+    ]);
+    assert.equal(r.issues.filter((i) => /two boxes in one slot/i.test(i.title)).length, 0, JSON.stringify(r.issues));
   });
 });

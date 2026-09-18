@@ -67,6 +67,20 @@ export function parseStow(raw: string | undefined | null, iso?: string | null): 
   };
 }
 
+/** Container number for maps: A-Z0-9 only, upper case. */
+export function containerKey(id: string | undefined | null): string {
+  return (id || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+export function stowEqual(a: StowPos | null | undefined, b: StowPos | null | undefined): boolean {
+  if (!a || !b) return false;
+  return a.bay === b.bay && a.row === b.row && a.tier === b.tier;
+}
+
+export function formatStowRaw(pos: StowPos): string {
+  return `${String(pos.bay).padStart(3, "0")}${String(pos.row).padStart(2, "0")}${String(pos.tier).padStart(2, "0")}`;
+}
+
 /** Prefer a 6–7 digit stow token, or bay-row-tier like 14-08-84. */
 export function stowFromRowText(text: string): string | undefined {
   const hyphen = [...text.matchAll(/\b(\d{1,3})[-/](\d{1,2})[-/](\d{2})\b/g)];

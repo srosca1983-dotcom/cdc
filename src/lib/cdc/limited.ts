@@ -20,30 +20,8 @@ function blobOf(input: LineInput): string {
   return [input.packaging, input.quantityRaw, input.name, ...(input.raw || [])].join(" ");
 }
 
-function packageCount(pkg: string): number {
-  const m = pkg.trim().match(/^(\d+(?:\.\d+)?)\s+/);
-  const n = m ? Number(m[1]) : 1;
-  return Number.isFinite(n) && n > 0 ? n : 1;
-}
-
-function kgPerPackage(input: LineInput): number | null {
-  if (input.quantityKg == null) return null;
-  return input.quantityKg / packageCount(input.packaging || "");
-}
-
 function bulkOrCylinder(pkg: string): boolean {
   return /\b(TK|TNK|TANK|TOTE|IBC|CYL(?:INDER)?S?|CY\b|PLTS?|PALLETS?|DRUMS?|DRM)\b/i.test(pkg);
-}
-
-/** Hardware-store class 2 inner packagings (aerosol cartons, lighter/cartridge CN). */
-function consumerClass2Package(input: LineInput): boolean {
-  const pkg = input.packaging || "";
-  if (bulkOrCylinder(pkg)) return false;
-  if (/\b(CN|CTN|CARTONS?|CANS?|BX|BOXES|BOX)\b/i.test(pkg)) return true;
-  const kg = input.quantityKg;
-  if (/\b(CS|CASES?)\b/i.test(pkg) && kg != null && kg < 25) return true;
-  if (!pkg.trim() && kg != null && kg < 25) return true;
-  return false;
 }
 
 export function hasExplicitLqMarks(lines: AnyLine[]): boolean {
@@ -55,8 +33,10 @@ export function hasExplicitLqMarks(lines: AnyLine[]): boolean {
 
 /**
  * IMDG 3.4 / 49 CFR 173.27 limited (and excepted) quantity.
- * CargoMax uses the DCM Limited QTY column. When that column is missing
- * (printed HAZ PDF) pass cartonFallback so CN/CARTON lots still count as LQ.
+ * CargoMax uses the DCM Limited QTY column. Do not infer LQ for a whole
+ * printed PDF just because it has no Limited QTY column.
+ *
+ * cartonFallback is opt-in only (default false). Production screens pass false.
  */
 export function isLimitedQty(line: AnyLine, cartonFallback = false): boolean {
   const input = inputOf(line);
@@ -73,14 +53,16 @@ export function isLimitedQty(line: AnyLine, cartonFallback = false): boolean {
   }
 
   // Pasha DCMs leave Limited QTY blank on many UN 1950 aerosol lines that
-  // CargoMax still treats as 3.4. Same for small class 2 cartons (3161, 3164, 1077).
+  // CargoMax still treats as 3.4. Other class 2 cartons are full DG unless marked.
   if (un === "1950" && !bulkOrCylinder(pkg)) return true;
-  if (/^2/.test(cls) && consumerClass2Package(input)) return true;
 
   if (cartonFallback) {
     if (bulkOrCylinder(pkg)) return false;
     if (/\b(CN|CTN|CARTONS?|CANS?|BX|BOXES|BOX)\b/i.test(pkg) || !pkg.trim()) {
-      const per = kgPerPackage(input);
+      const n = input.quantityKg;
+      const countMatch = (pkg || "").trim().match(/^(\d+(?:\.\d+)?)\s+/);
+      const count = countMatch ? Number(countMatch[1]) : 1;
+      const per = n == null ? null : n / (Number.isFinite(count) && count > 0 ? count : 1);
       if (per == null || per < 30) return true;
     }
   }

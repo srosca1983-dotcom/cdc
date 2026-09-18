@@ -118,6 +118,34 @@ describe("BAPLIE", () => {
     assert.equal(heatSensitive("8"), false);
   });
 
+  it("does not flag paint next to an empty NOR reefer", () => {
+    const plan = parseBaplie(SAMPLE_BAPLIE, "sample.edi");
+    const lines: LineInput[] = [
+      {
+        rowIndex: 1,
+        un: "1263",
+        name: "PAINT",
+        hazClass: "3",
+        subsidiary: "",
+        packaging: "6 PA",
+        packingGroup: "III",
+        quantityKg: 18000,
+        quantityRaw: "18000 kg",
+        raw: [],
+        container: "DGPA0000002",
+        stowLoc: "0180184",
+      },
+    ];
+    const ev = evaluateManifest(lines, CONTAINER_OPTIONS);
+    const issues = reeferHeatIssues(ev.lines, plan);
+    assert.equal(
+      issues.filter((i) => /NORA0000005/.test(i.title) || i.containers.includes("NORA0000005")).length,
+      0,
+      JSON.stringify(issues),
+    );
+    assert.ok(issues.some((i) => /RFRA0000001/.test(i.title) || i.containers.includes("RFRA0000001")));
+  });
+
   it("faces motors aft except bay 6 / 22 below", () => {
     assert.equal(reeferMotors({ raw: "", bay: 18, row: 2, tier: 84, onDeck: true, hatch: 5, fortyFoot: true }), "aft");
     assert.equal(reeferMotors({ raw: "", bay: 6, row: 5, tier: 4, onDeck: false, hatch: 2, fortyFoot: true }), "fwd");

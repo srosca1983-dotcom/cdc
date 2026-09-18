@@ -37,7 +37,7 @@ import { DISCLAIMER, ENOAD_BLURB, RULE_CARDS } from "@/lib/cdc/rules-text.ts";
 import { PASHA_SAMPLE, WORKED_SAMPLE } from "@/lib/cdc/sample.ts";
 import { categoryScan, type ScanItem } from "@/lib/cdc/scan.ts";
 import { loadCargo, loadVoyageLog, logLabel, pushVoyageLog, saveCargo, voyageBits, type VoyageLog } from "@/lib/cdc/history.ts";
-import { isLimitedQty, hasExplicitLqMarks } from "@/lib/cdc/limited.ts";
+import { isLimitedQty } from "@/lib/cdc/limited.ts";
 import { CONTAINER_OPTIONS } from "@/lib/cdc/types.ts";
 import type { EvalResult, LineResult, ParseResult, VoyageInfo } from "@/lib/cdc/types.ts";
 import { cn } from "@/lib/utils";
@@ -369,8 +369,7 @@ function ManifestPanel({
   }
 
   const flaggedCount = result ? result.cdc + result.residue + result.review : 0;
-  const cartonFallback = result ? !hasExplicitLqMarks(result.lines) : false;
-  const lqCount = result ? result.lines.filter((l) => isLimitedQty(l, cartonFallback)).length : 0;
+  const lqCount = result ? result.lines.filter((l) => isLimitedQty(l)).length : 0;
   const fullCount = result ? result.total - lqCount : 0;
 
   const filtered = useMemo(() => {
@@ -382,8 +381,8 @@ function ManifestPanel({
       if (filter === "CDC" && l.verdict !== "CDC" && l.verdict !== "CDC_RESIDUE") return false;
       if (filter === "REVIEW" && l.verdict !== "REVIEW") return false;
       if (filter === "NOT_CDC" && l.verdict !== "NOT_CDC") return false;
-      if (filter === "full" && isLimitedQty(l, cartonFallback)) return false;
-      if (filter === "lq" && !isLimitedQty(l, cartonFallback)) return false;
+      if (filter === "full" && isLimitedQty(l)) return false;
+      if (filter === "lq" && !isLimitedQty(l)) return false;
       if (!needle) return true;
       const hay = [
         l.un,
@@ -393,7 +392,7 @@ function ManifestPanel({
         l.input.container,
         l.input.booking,
         l.input.technicalName,
-        isLimitedQty(l, cartonFallback) ? "ltd qty limited" : "full dg",
+        isLimitedQty(l) ? "ltd qty limited" : "full dg",
       ]
         .filter(Boolean)
         .join(" ")
@@ -401,14 +400,14 @@ function ManifestPanel({
       return hay.includes(needle);
     })
       .sort((a, b) => {
-        const lq = Number(isLimitedQty(a, cartonFallback)) - Number(isLimitedQty(b, cartonFallback));
+        const lq = Number(isLimitedQty(a)) - Number(isLimitedQty(b));
         if (lq) return lq;
         const ca = (a.input.container || "").toUpperCase();
         const cb = (b.input.container || "").toUpperCase();
         if (ca !== cb) return ca.localeCompare(cb);
         return a.un.localeCompare(b.un);
       });
-  }, [result, filter, query, cartonFallback]);
+  }, [result, filter, query]);
 
   function onDrop(e: DragEvent) {
     e.preventDefault();
@@ -670,7 +669,6 @@ function ManifestPanel({
                 query={query}
                 flaggedCount={flaggedCount}
                 total={result.total}
-                cartonFallback={cartonFallback}
                 onShowAll={() => setFilter("all")}
               />
             </section>
@@ -1101,7 +1099,6 @@ function ResultsTable({
   query,
   flaggedCount,
   total,
-  cartonFallback,
   onShowAll,
 }: {
   rows: LineResult[];
@@ -1109,7 +1106,6 @@ function ResultsTable({
   query: string;
   flaggedCount: number;
   total: number;
-  cartonFallback: boolean;
   onShowAll: () => void;
 }) {
   if (rows.length === 0) {
@@ -1163,7 +1159,7 @@ function ResultsTable({
                   Class {row.hazClass || "—"}
                   {row.input.subsidiary ? ` (${row.input.subsidiary})` : ""}
                   {row.pih ? " · PIH" : ""}
-                  {isLimitedQty(row, cartonFallback) ? " · Ltd qty" : ""}
+                  {isLimitedQty(row) ? " · Ltd qty" : ""}
                   {row.input.container ? ` · ${row.input.container}` : ""}
                 </p>
               </td>

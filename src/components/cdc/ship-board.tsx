@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, Flame } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { sheetFor, type ErgSheet } from "@/lib/erg/guides.ts";
-import { HATCHES, SHIP_NOTES, VESSEL, deckRowsFor, holdRowsFor } from "@/lib/ship/george-ii.ts";
+import { HATCHES, SHIP_NOTES, VESSEL, deckRowsFor, holdRowsFor, deckTiersFor, holdTiersFor } from "@/lib/ship/george-ii.ts";
 import {
   hatchBuckets,
   unstowed,
@@ -10,20 +10,25 @@ import {
   type HatchBucket,
 } from "@/lib/ship/layout.ts";
 import {
+  applyPlanStow,
   issuesForKey,
   screenVoyage,
   worstSeverity,
   type StowIssue,
   type VoyageScreen,
 } from "@/lib/ship/segregation.ts";
-import { formatStow } from "@/lib/ship/stow.ts";
+import { containerKey, formatStow } from "@/lib/ship/stow.ts";
 import { formatKg } from "@/lib/cdc/quantity.ts";
-import { hasExplicitLqMarks, isLimitedQty } from "@/lib/cdc/limited.ts";
-import { hatchSlots } from "@/lib/baplie/overlay.ts";
+import { isLimitedQty } from "@/lib/cdc/limited.ts";
+import { ghostSlots, hatchSlots } from "@/lib/baplie/overlay.ts";
 import { countBoxes, countReefers, motorsNote, reeferHeatIssues } from "@/lib/baplie/heat.ts";
 import type { BapliePlan } from "@/lib/baplie/types.ts";
 import type { EvalResult, LineResult, ParseResult } from "@/lib/cdc/types.ts";
 import { cn } from "@/lib/utils";
+
+function slotLookupKey(key: string): string {
+  return key.split("#")[0];
+}
 
 export function ShipBoard({
   parsed,
@@ -39,9 +44,11 @@ export function ShipBoard({
   const [chem, setChem] = useState<{ un: string; cls: string; name: string } | null>(null);
 
   const lines = result?.lines ?? [];
-  const cartonFallback = !hasExplicitLqMarks(lines);
-  const lqOf = (line: LineResult) => isLimitedQty(line, cartonFallback);
-  const buckets = useMemo(() => hatchBuckets(lines), [lines]);
+  const lqOf = (line: LineResult) => isLimitedQty(line);
+  const buckets = useMemo(() => {
+    applyPlanStow(lines, baplie);
+    return hatchBuckets(lines);
+  }, [lines, baplie]);
   const screen = useMemo(() => screenVoyage(lines, baplie), [lines, baplie]);
   const heat = useMemo(() => reeferHeatIssues(lines, baplie), [lines, baplie]);
   const loose = useMemo(() => unstowed(lines), [lines]);
@@ -61,14 +68,17 @@ export function ShipBoard({
   }
 
   if (slot && active) {
+    const k = slotLookupKey(slot.key);
     return (
       <ContainerView
         slot={slot}
         hatch={active}
-        issues={[...issuesForKey(screen, slot.key), ...heat.filter((i) => i.containers.some((c) => c.toUpperCase() === slot.key))]}
+        issues={[
+          ...issuesForKey(screen, k),
+          ...heat.filter((i) => i.containers.some((c) => containerKey(c) === containerKey(k))),
+        ]}
         onBack={() => setSlotKey(null)}
         onChem={setChem}
-        cartonFallback={cartonFallback}
       />
     );
   }
@@ -81,7 +91,6 @@ export function ShipBoard({
         issues={[...(screen.byHatch.get(active.spec.id) ?? []), ...heat.filter((i) => i.hatch === active.spec.id)]}
         screen={screen}
         baplie={baplie}
-        cartonFallback={cartonFallback}
         onBack={() => {
           setHatchId(null);
           setSlotKey(null);
@@ -105,7 +114,7 @@ export function ShipBoard({
           House and conning are forward. Hatches 1–12 run aft. The engine casing sits at Hatch 10;
           the LNG vent mast is part of the plant, not a cargo tank.
           {baplie
-            ? " BAPLIE is on this voyage: reefers (motors aft), dry cargo, and DG from the DCM share the same cells."
+            ? " BAPLIE is on this voyage: reefers, dry cargo, and DG from the DCM share the same cells."
             : " Drop a BAPLIE on Manifest when you want reefers and the rest of the boxes. DCM-only still works."}
         </p>
       </div>
@@ -118,6 +127,7 @@ export function ShipBoard({
         {buckets.map((b) => {
           const issues = screen.byHatch.get(b.spec.id) ?? [];
           const worst = worstSeverity(issues);
+          const nBoxes = baplie ? countBoxes(baplie, b.spec.id) : 0;
           return (
           <button
             key={b.spec.id}
@@ -129,7 +139,7 @@ export function ShipBoard({
                 ? "border-cdc"
                 : worst === "seg"
                   ? "border-review"
-                  : b.lines.length > 0
+                  : b.lines.length > 0 || nBoxes > 0
                     ? "border-accent/40 hover:border-accent"
                     : "hover:border-navy/30",
             )}
@@ -142,10 +152,12 @@ export function ShipBoard({
                   {b.spec.holdAccess === "tunnel" ? " · tunnel" : b.spec.holdAccess === "deck" ? " · deck access" : ""}
                 </p>
               </div>
-              {b.lines.length > 0 ? (
+              {nBoxes > 0 ? (
+                <Badge variant="navy">
+                  {nBoxes} boxes{b.lines.length ? ` · ${b.lines.length} DG` : ""}
+                </Badge>
+              ) : b.lines.length > 0 ? (
                 <Badge variant="navy">{b.lines.length} DG</Badge>
-              ) : baplie && countBoxes(baplie, b.spec.id) > 0 ? (
-                <Badge variant="navy">{countBoxes(baplie, b.spec.id)} boxes</Badge>
               ) : (
                 <span className="text-xs text-subtle">No DG</span>
               )}
@@ -183,7 +195,7 @@ export function ShipBoard({
               </p>
             )}
             {baplie && countReefers(baplie, b.spec.id) > 0 && (
-              <p className="mt-1 text-xs text-ink">{countReefers(baplie, b.spec.id)} reefers · motors aft</p>
+              <p className="mt-1 text-xs text-ink">{countReefers(baplie, b.spec.id)} reefers</p>
             )}
             {b.cdc > 0 && <p className="mt-1 text-xs text-cdc">{b.cdc} CDC</p>}
           </button>
@@ -334,7 +346,8 @@ function Profile({
         {HATCHES.map((h, i) => {
           const x = 218 + i * 68;
           const b = buckets[i];
-          const hot = b.lines.length > 0;
+          const nBoxes = baplie ? countBoxes(baplie, h.id) : 0;
+          const hot = b.lines.length > 0 || nBoxes > 0;
           const w = h.id === 10 ? 44 : 58;
           const worst = worstSeverity(screen.byHatch.get(h.id) ?? []);
           const rf = baplie ? countReefers(baplie, h.id) : 0;
@@ -343,11 +356,13 @@ function Profile({
               ? "var(--color-cdc)"
               : worst === "seg"
                 ? "var(--color-review)"
-                : hot
+                : b.lines.length
                   ? "var(--color-ok)"
                   : rf
                     ? "var(--color-accent)"
-                    : "currentColor";
+                    : nBoxes
+                      ? "var(--color-navy-2)"
+                      : "currentColor";
           return (
             <g key={h.id}>
               <rect
@@ -388,7 +403,7 @@ function Profile({
               )}
               {!worst && hot && (
                 <text x={x + w / 2} y={80} textAnchor="middle" fill="var(--color-review)" fontSize="10">
-                  {b.lines.length}
+                  {b.lines.length || nBoxes}
                 </text>
               )}
             </g>
@@ -425,7 +440,6 @@ function HatchView({
   issues,
   screen,
   baplie,
-  cartonFallback,
   onBack,
   onSlot,
 }: {
@@ -434,19 +448,21 @@ function HatchView({
   issues: StowIssue[];
   screen: VoyageScreen;
   baplie: BapliePlan | null;
-  cartonFallback: boolean;
   onBack: () => void;
   onSlot: (key: string) => void;
 }) {
-  const deckOccupied = slots.filter((s) => s.stow?.onDeck).map((s) => s.stow!.row);
-  const holdOccupied = slots.filter((s) => s.stow && !s.stow.onDeck).map((s) => s.stow!.row);
-  const deckRowList = deckRowsFor(bucket.spec, deckOccupied);
-  const holdRowList = holdRowsFor(bucket.spec, holdOccupied);
-  const deckTiers = [82, 84, 86, 88, 90];
-  const holdTiers = [2, 4, 6, 8, 10, 12];
+  const drawn = slots.filter((s) => !s.ghost);
+  const ghosts = ghostSlots(slots, bucket.spec);
+  const deckTiers = deckTiersFor(
+    bucket.spec,
+    drawn.filter((s) => s.stow?.onDeck).map((s) => s.stow!.tier),
+  );
+  const holdTiers = holdTiersFor(bucket.spec);
+  const deckRowList = deckRowsFor(bucket.spec);
+  const holdRowList = holdRowsFor(bucket.spec);
 
-  function cell(tier: number, row: number) {
-    return slots.find((s) => s.stow?.tier === tier && s.stow?.row === row);
+  function cells(tier: number, row: number, bay: number) {
+    return drawn.filter((s) => s.stow?.tier === tier && s.stow?.row === row && s.stow?.bay === bay);
   }
 
   return (
@@ -461,8 +477,8 @@ function HatchView({
         </h2>
         <p className="mt-1 text-sm text-muted">
           Section looking forward from aft — port is to the left (even cells), 00 is
-          centerline, starboard is odd. Bays {bucket.spec.bays.join("-")} ({bucket.spec.bay40} is
-          the 40'). Press a box for the cargo list.
+          centerline, starboard is odd. Each cell is three bays: {bucket.spec.bays[0]} (20' fwd) ·{" "}
+          {bucket.spec.bay40} (40') · {bucket.spec.bays[2]} (20' aft). Press a box for the cargo list.
         </p>
       </div>
 
@@ -485,32 +501,54 @@ function HatchView({
       </div>
       {baplie ? (
         <p className="text-xs text-muted">
-          Navy = live reefer (motors aft). Muted navy = NOR. Green = Ltd Qty only. Ink = full DG. Red/amber = a real CSM or 176.83 hit. Grey =
-          other cargo. Empty cells are empty.
+          Navy = live reefer. Muted navy = NOR. Green = Ltd Qty only. Ink = full DG. Red/amber = a real CSM or 176.83 hit. Grey =
+          other cargo. Empty cells are empty. A 40' sits only in the middle column.
         </p>
       ) : null}
 
       <IssueList issues={issues} />
 
       <BayGrid
-        title={`On deck · bays ${bucket.spec.bays.join("-")}${bucket.spec.id === 1 ? " · 11 across with 00" : bucket.spec.id === 10 ? " · bay 38 no middle" : " · 12 across"}`}
+        title={`On deck · bays ${bucket.spec.bays.join("-")} · 20'/40'/20'${bucket.spec.id === 1 ? " · 11 across with 00" : bucket.spec.id === 10 ? " · bay 38 no middle" : " · 12 across"}`}
         tiers={deckTiers}
         rows={deckRowList}
-        cell={cell}
+        bays={bucket.spec.bays}
+        cells={cells}
         onSlot={onSlot}
         screen={screen}
-        cartonFallback={cartonFallback}
       />
-      {bucket.spec.holdRows > 0 && (
+      {holdRowList.length > 0 && holdTiers.length > 0 && (
         <BayGrid
-          title={`Below deck · ${bucket.spec.hold || "hold"} · ${bucket.spec.holdAccess} access · 7 across with 00`}
+          title={`Below deck · ${bucket.spec.hold || "hold"} · ${bucket.spec.holdAccess} access · 7 across with 00 · 20'/40'/20'`}
           tiers={holdTiers}
           rows={holdRowList}
-          cell={cell}
+          bays={bucket.spec.bays}
+          cells={cells}
           onSlot={onSlot}
           screen={screen}
-          cartonFallback={cartonFallback}
         />
+      )}
+
+      {ghosts.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium">Not a real cell on this cover</h3>
+          <p className="mt-1 text-xs text-muted">
+            Hatch {bucket.spec.id} does not have these rows. They stay off the grid.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {ghosts.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => onSlot(s.key)}
+                className="rounded-md border border-review/40 bg-review-soft px-3 py-2 font-mono text-xs"
+              >
+                {s.container}
+                {s.stow ? ` · ${s.stow.bay}-${String(s.stow.row).padStart(2, "0")}-${s.stow.tier}` : ""}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       {slots.some((s) => !s.stow) && (
@@ -542,35 +580,101 @@ function HatchView({
   );
 }
 
+function slotLabel(s: ContainerSlot): string {
+  if (s.lines.length) return s.lines.map((l) => l.line.hazClass).filter(Boolean)[0] || "DG";
+  if (s.reefer) {
+    const face = s.box?.motors === "fwd" ? "fwd" : "aft";
+    return `${s.operating ? "RF" : "NOR"} ${face}`;
+  }
+  if (s.stow?.fortyFoot) return s.box?.iso || "40'";
+  return s.box?.iso || "20'";
+}
+
+function SlotButton({
+  s,
+  wide,
+  onSlot,
+  screen,
+}: {
+  s: ContainerSlot;
+  wide: boolean;
+  onSlot: (key: string) => void;
+  screen: VoyageScreen;
+}) {
+  const worst = worstSeverity(issuesForKey(screen, slotLookupKey(s.key)));
+  const lqOnly = s.lines.length > 0 && s.lines.every((d) => isLimitedQty(d.line));
+  const fullDg = s.lines.some((d) => !isLimitedQty(d.line));
+  return (
+    <button
+      type="button"
+      onClick={() => onSlot(s.key)}
+      className={cn(
+        "flex min-h-14 w-full flex-col items-center justify-center rounded-sm px-0.5 font-mono text-[9px] leading-tight",
+        wide ? "min-w-[2.4rem]" : "min-w-[1.6rem]",
+        s.conflict || s.mismatch
+          ? "ring-1 ring-review"
+          : "",
+        worst === "block"
+          ? "bg-cdc-soft text-ink"
+          : worst === "seg"
+            ? "bg-review-soft text-ink"
+            : fullDg
+              ? "bg-navy/15 text-ink"
+              : lqOnly
+                ? "bg-ok-soft text-ink"
+                : s.operating
+                  ? "bg-navy text-primary-foreground"
+                  : s.reefer
+                    ? "bg-navy-2 text-primary-foreground"
+                    : s.box
+                      ? "bg-surface-2 text-ink"
+                      : "bg-ok-soft text-ink",
+      )}
+    >
+      <span className="max-w-full truncate">{s.container.replace(/[A-Z]{4}/, (p) => p.slice(0, 4))}</span>
+      <span className={s.operating || s.reefer ? "text-primary-foreground/80" : "text-muted"}>
+        {slotLabel(s)}
+        {s.stow?.fortyFoot ? " 40'" : ""}
+        {worst || s.conflict ? " !" : ""}
+      </span>
+    </button>
+  );
+}
+
 function BayGrid({
   title,
   tiers,
   rows,
-  cell,
+  bays,
+  cells,
   onSlot,
   screen,
-  cartonFallback,
 }: {
   title: string;
   tiers: number[];
   rows: number[];
-  cell: (tier: number, row: number) => ContainerSlot | undefined;
+  bays: [number, number, number];
+  cells: (tier: number, row: number, bay: number) => ContainerSlot[];
   onSlot: (key: string) => void;
   screen: VoyageScreen;
-  cartonFallback: boolean;
 }) {
   return (
     <div className="overflow-x-auto">
       <p className="mb-2 text-xs font-medium tracking-wide text-subtle uppercase">
         {title} · PORT even ← · 00 CL · STBD odd →
       </p>
-      <table className="w-full min-w-[520px] border-collapse text-center text-xs">
+      <table className="w-full min-w-[720px] border-collapse text-center text-xs">
         <thead>
           <tr>
             <th className="p-1 text-muted">Tier</th>
             {rows.map((r) => (
               <th key={r} className="p-1 font-mono text-muted">
                 {String(r).padStart(2, "0")}
+                <div className="mt-0.5 grid grid-cols-[1fr_1.3fr_1fr] font-normal text-[9px] text-subtle">
+                  <span>{bays[0]}</span>
+                  <span>{bays[1]}</span>
+                  <span>{bays[2]}</span>
+                </div>
               </th>
             ))}
           </tr>
@@ -579,57 +683,31 @@ function BayGrid({
           {[...tiers].reverse().map((tier) => (
             <tr key={tier}>
               <td className="p-1 font-mono text-muted">{tier}</td>
-              {rows.map((row) => {
-                const s = cell(tier, row);
-                const worst = s ? worstSeverity(issuesForKey(screen, s.key)) : null;
-                const lqOnly =
-                  !!s &&
-                  s.lines.length > 0 &&
-                  s.lines.every((d) => isLimitedQty(d.line, cartonFallback));
-                const fullDg = !!s && s.lines.some((d) => !isLimitedQty(d.line, cartonFallback));
-                return (
-                  <td key={row} className="p-0.5">
-                    {s ? (
-                      <button
-                        type="button"
-                        onClick={() => onSlot(s.key)}
-                        className={cn(
-                          "flex h-14 w-full flex-col items-center justify-center rounded-sm px-1 font-mono text-[10px] leading-tight",
-                          worst === "block"
-                            ? "bg-cdc-soft text-ink"
-                            : worst === "seg"
-                              ? "bg-review-soft text-ink"
-                              : fullDg
-                                ? "bg-navy/15 text-ink"
-                                : lqOnly
-                                  ? "bg-ok-soft text-ink"
-                                  : s.operating
-                                    ? "bg-navy text-primary-foreground"
-                                    : s.reefer
-                                      ? "bg-navy-2 text-primary-foreground"
-                                      : s.box
-                                        ? "bg-surface-2 text-ink"
-                                        : "bg-ok-soft text-ink",
-                        )}
-                      >
-                        <span>{s.container.replace(/[A-Z]{4}/, (p) => p.slice(0, 4))}</span>
-                        <span className={s.operating || s.reefer ? "text-primary-foreground/80" : "text-muted"}>
-                          {s.lines.length
-                            ? s.lines.map((l) => l.line.hazClass).filter(Boolean)[0]
-                            : s.reefer
-                              ? s.operating
-                                ? "RF"
-                                : "NOR"
-                              : s.box?.iso || "—"}
-                          {worst ? " !" : ""}
-                        </span>
-                      </button>
-                    ) : (
-                      <div className="h-14 rounded-sm bg-surface-2/80" />
-                    )}
-                  </td>
-                );
-              })}
+              {rows.map((row) => (
+                <td key={row} className="p-0.5">
+                  <div className="grid grid-cols-[1fr_1.3fr_1fr] gap-px">
+                    {bays.map((bay, i) => {
+                      const stack = cells(tier, row, bay);
+                      const wide = i === 1;
+                      if (!stack.length) {
+                        return (
+                          <div
+                            key={bay}
+                            className={cn("min-h-14 rounded-sm bg-surface-2/80", wide && "min-w-[2.4rem]")}
+                          />
+                        );
+                      }
+                      return (
+                        <div key={bay} className="flex flex-col gap-px">
+                          {stack.map((s) => (
+                            <SlotButton key={s.key} s={s} wide={wide} onSlot={onSlot} screen={screen} />
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>
@@ -679,17 +757,15 @@ function ContainerView({
   issues,
   onBack,
   onChem,
-  cartonFallback,
 }: {
   slot: ContainerSlot;
   hatch: HatchBucket;
   issues: StowIssue[];
   onBack: () => void;
   onChem: (c: { un: string; cls: string; name: string }) => void;
-  cartonFallback: boolean;
 }) {
-  const full = slot.lines.filter((d) => !isLimitedQty(d.line, cartonFallback));
-  const lq = slot.lines.filter((d) => isLimitedQty(d.line, cartonFallback));
+  const full = slot.lines.filter((d) => !isLimitedQty(d.line));
+  const lq = slot.lines.filter((d) => isLimitedQty(d.line));
   return (
     <div className="space-y-5">
       <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm text-accent">
@@ -699,6 +775,12 @@ function ContainerView({
         <p className="font-mono text-xs text-subtle uppercase">Container</p>
         <h2 className="mt-1 font-mono text-xl">{slot.container}</h2>
         {slot.stow && <p className="mt-1 text-sm text-muted">{formatStow(slot.stow)}</p>}
+        {slot.mismatch && (
+          <p className="mt-1 text-sm text-review">DCM and BAPLIE do not agree on this cell — pick one.</p>
+        )}
+        {slot.conflict && (
+          <p className="mt-1 text-sm text-cdc">Two boxes hash to this bay-row-tier.</p>
+        )}
         {slot.reefer && slot.box ? (
           <p className="mt-1 text-sm text-ink">
             Reefer {slot.box.iso || ""} {slot.operating ? `live ${slot.box.tempC ?? "set"}°C` : "NOR (not operating)"}. {motorsNote(slot.box)}

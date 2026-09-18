@@ -10,10 +10,10 @@
  */
 
 import type { LineResult } from "../cdc/types.ts";
-import { hasExplicitLqMarks, isLimitedQty } from "../cdc/limited.ts";
-import type { BapliePlan } from "../baplie/types.ts";
-import { HATCHES, hatchSpec, athwartGap, isCasingCell, type HatchSpec } from "./george-ii.ts";
-import { parseStow, type StowPos } from "./stow.ts";
+import { isLimitedQty } from "../cdc/limited.ts";
+import type { BaplieBox, BapliePlan } from "../baplie/types.ts";
+import { HATCHES, hatchSpec, athwartGap, isCasingCell, occupiedBays, type HatchSpec } from "./george-ii.ts";
+import { containerKey, formatStowRaw, parseStow, stowEqual, type StowPos } from "./stow.ts";
 
 export type IssueSeverity = "block" | "seg" | "watch";
 
@@ -168,13 +168,11 @@ interface Box {
 }
 
 function boxesFrom(lines: LineResult[]): Box[] {
-  const cartonFallback = !hasExplicitLqMarks(lines);
-  const lq = (line: LineResult) => isLimitedQty(line, cartonFallback);
   const map = new Map<string, Box>();
   for (const line of lines) {
     if (!line.un) continue;
     const stow = parseStow(line.input.stowLoc);
-    const cn = (line.input.container || "").toUpperCase() || `row-${line.input.rowIndex}`;
+    const cn = containerKey(line.input.container) || `row-${line.input.rowIndex}`;
     const cur = map.get(cn) ?? {
       key: cn,
       container: line.input.container || "No container no.",
@@ -193,7 +191,7 @@ function boxesFrom(lines: LineResult[]): Box[] {
     for (const g of groups) {
       if (!cur.classes.includes(g)) cur.classes.push(g);
     }
-    if (!lq(line)) {
+    if (!isLimitedQty(line)) {
       cur.allLq = false;
       if (groups.length) cur.fullLineGroups.push(groups);
       for (const g of groups) {
@@ -220,7 +218,7 @@ function hold2Forbidden(cls: string): string | null {
   return null;
 }
 
-function locationIssues(box: Box, spec: HatchSpec, cartonFallback: boolean): StowIssue[] {
+function locationIssues(box: Box, spec: HatchSpec): StowIssue[] {
   if (!box.stow) return [];
   // IMDG 3.4.4 / CargoMax: limited quantities are not under the ship's class-by-hold DoC.
   if (box.allLq) return [];
@@ -260,7 +258,7 @@ function locationIssues(box: Box, spec: HatchSpec, cartonFallback: boolean): Sto
     const checks =
       box.lines.length > 0
         ? box.lines
-            .filter((line) => !isLimitedQty(line, cartonFallback))
+            .filter((line) => !isLimitedQty(line))
             .map((line) => ({
               un: line.un,
               cls: line.hazClass,
@@ -328,12 +326,21 @@ function pairSatisfied(code: SegCode, a: Box, b: Box): boolean {
   const sameRow = a.stow.row === b.stow.row;
   const hDiff = Math.abs(a.stow.hatch - b.stow.hatch);
   const holdDiff = Math.abs(holdId(a.stow.hatch) - holdId(b.stow.hatch));
+  const tierGap = Math.abs(a.stow.tier - b.stow.tier);
+  const bayGap = Math.abs(a.stow.bay - b.stow.bay);
 
   if (code === "1") return true;
   if (code === "*") return false;
   if (code === "2") {
-    if (sameHatch && sameLevel && (cells < 2 || sameRow)) return false;
-    return true;
+    // Closed-container “Separated from”: one empty cell athwart, one empty
+    // tier vertically, or 20' fwd vs 20' aft on the same hatch. Adjacent
+    // hatch covers on the same level are not separated.
+    if (!sameLevel) return true;
+    if (!sameHatch) return hDiff !== 1;
+    if (cells >= 2) return true;
+    if (tierGap >= 4) return true;
+    if (sameRow && bayGap >= 2) return true;
+    return false;
   }
   if (code === "3") {
     if (sameHatch) return false;
@@ -413,7 +420,7 @@ function mergeBaplie(boxes: Box[], plan: BapliePlan | null): Box[] {
   const map = new Map(boxes.map((b) => [b.key, b]));
   for (const p of plan.boxes) {
     if (!p.dg.length) continue;
-    const key = p.container.toUpperCase();
+    const key = containerKey(p.container) || p.container.toUpperCase();
     const cur = map.get(key) ?? {
       key,
       container: p.container,
@@ -427,7 +434,7 @@ function mergeBaplie(boxes: Box[], plan: BapliePlan | null): Box[] {
       allLq: false,
     };
     if (!cur.stow && p.stow) cur.stow = p.stow;
-    const dcmOwnsLq = cur.lines.length > 0;
+    const dcmPresent = cur.lines.length > 0;
     for (const dg of p.dg) {
       const g = classGroup(dg.cls);
       if (g && !cur.classes.includes(g)) cur.classes.push(g);
@@ -435,7 +442,9 @@ function mergeBaplie(boxes: Box[], plan: BapliePlan | null): Box[] {
         const sg = classGroup(dg.subsidiary);
         if (sg && !cur.classes.includes(sg)) cur.classes.push(sg);
       }
-      if (!dcmOwnsLq) {
+      // BAPLIE DGS has no LQ flag. DCM-present (including all-LQ) keeps DCM
+      // classes; BAPLIE-only DGS is full DG.
+      if (!dcmPresent) {
         const group = [g, dg.subsidiary ? classGroup(dg.subsidiary) : null].filter(Boolean) as string[];
         if (g && !cur.fullClasses.includes(g)) cur.fullClasses.push(g);
         if (group.length) cur.fullLineGroups.push(group);
@@ -452,13 +461,115 @@ function mergeBaplie(boxes: Box[], plan: BapliePlan | null): Box[] {
   return [...map.values()];
 }
 
-export function screenVoyage(lines: LineResult[], plan: BapliePlan | null = null): VoyageScreen {
-  const cartonFallback = !hasExplicitLqMarks(lines);
-  const boxes = mergeBaplie(boxesFrom(lines), plan);
+/**
+ * Copy BAPLIE LOC+147 onto a DCM line that has no parseable stow.
+ * If both parse and disagree, keep the DCM cell and raise one watch.
+ */
+export function applyPlanStow(lines: LineResult[], plan: BapliePlan | null): StowIssue[] {
+  if (!plan) return [];
+  const byCn = new Map<string, BaplieBox>();
+  for (const b of plan.boxes) {
+    const k = containerKey(b.container);
+    if (k && b.stow) byCn.set(k, b);
+  }
   const issues: StowIssue[] = [];
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const k = containerKey(line.input.container);
+    if (!k) continue;
+    const box = byCn.get(k);
+    if (!box?.stow) continue;
+    const dcm = parseStow(line.input.stowLoc);
+    const planRaw = box.stowRaw || formatStowRaw(box.stow);
+    if (!dcm) {
+      line.input.stowLoc = planRaw;
+      continue;
+    }
+    if (stowEqual(dcm, box.stow)) continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const dcmRaw = line.input.stowLoc || formatStowRaw(dcm);
+    issues.push({
+      id: `stow-mismatch-${k}`,
+      severity: "watch",
+      hatch: dcm.hatch,
+      containers: [line.input.container || k],
+      uns: line.un ? [line.un] : [],
+      title: `DCM stow ${dcmRaw} vs BAPLIE ${planRaw} — pick one.`,
+      detail: `${line.input.container || k} is ${dcmRaw} on the DCM and ${planRaw} on the BAPLIE. Alarms stay on the DCM cell; the plan slot is drawn separately.`,
+      rule: "DCM vs BAPLIE stow",
+    });
+  }
+  return issues;
+}
+
+interface Occupant {
+  key: string;
+  container: string;
+  stow: StowPos;
+}
+
+function slotOccupants(lines: LineResult[], plan: BapliePlan | null): Occupant[] {
+  const map = new Map<string, Occupant>();
+  if (plan) {
+    for (const b of plan.boxes) {
+      if (!b.stow) continue;
+      const key = containerKey(b.container) || b.container.toUpperCase();
+      map.set(key, { key, container: b.container, stow: b.stow });
+    }
+  }
+  for (const line of lines) {
+    const stow = parseStow(line.input.stowLoc);
+    if (!stow) continue;
+    const key = containerKey(line.input.container) || `row-${line.input.rowIndex}`;
+    if (map.has(key)) continue;
+    map.set(key, { key, container: line.input.container || key, stow });
+  }
+  return [...map.values()];
+}
+
+function baysOverlap(a: Occupant, b: Occupant): boolean {
+  if (a.stow.hatch !== b.stow.hatch) return false;
+  if (a.stow.onDeck !== b.stow.onDeck) return false;
+  if (a.stow.row !== b.stow.row) return false;
+  if (a.stow.tier !== b.stow.tier) return false;
+  const spec = hatchSpec(a.stow.hatch);
+  const oa = occupiedBays(a.stow, spec);
+  const ob = occupiedBays(b.stow, spec);
+  return oa.some((bay) => ob.includes(bay));
+}
+
+export function slotOverlapIssues(lines: LineResult[], plan: BapliePlan | null): StowIssue[] {
+  const occ = slotOccupants(lines, plan);
+  const issues: StowIssue[] = [];
+  for (let i = 0; i < occ.length; i++) {
+    for (let j = i + 1; j < occ.length; j++) {
+      const a = occ[i];
+      const b = occ[j];
+      if (a.key === b.key) continue;
+      if (!baysOverlap(a, b)) continue;
+      issues.push({
+        id: `slot-${a.key}-${b.key}-${a.stow.bay}-${a.stow.row}-${a.stow.tier}`,
+        severity: "block",
+        hatch: a.stow.hatch,
+        containers: [a.container, b.container],
+        uns: [],
+        title: "two boxes in one slot.",
+        detail: `${a.container} at ${formatStowRaw(a.stow)} and ${b.container} at ${formatStowRaw(b.stow)} occupy the same 20'/40' footprint on Hatch ${a.stow.hatch}. Not 176.83.`,
+        rule: "Slot overlap — two boxes in one cell",
+      });
+    }
+  }
+  return issues;
+}
+
+export function screenVoyage(lines: LineResult[], plan: BapliePlan | null = null): VoyageScreen {
+  const mismatch = applyPlanStow(lines, plan);
+  const boxes = mergeBaplie(boxesFrom(lines), plan);
+  const issues: StowIssue[] = [...mismatch, ...slotOverlapIssues(lines, plan)];
   for (const box of boxes) {
     const spec = box.stow ? hatchSpec(box.stow.hatch) : undefined;
-    if (spec) issues.push(...locationIssues(box, spec, cartonFallback));
+    if (spec) issues.push(...locationIssues(box, spec));
   }
   for (const box of boxes) {
     const inner = pairIssue(box, box);
@@ -490,7 +601,7 @@ export function screenVoyage(lines: LineResult[], plan: BapliePlan | null = null
     list.push(issue);
     byHatch.set(issue.hatch, list);
     for (const c of issue.containers) {
-      const key = c.toUpperCase();
+      const key = containerKey(c) || c.toUpperCase();
       const cur = byContainer.get(key) ?? [];
       cur.push(issue);
       byContainer.set(key, cur);
@@ -508,7 +619,8 @@ export function screenVoyage(lines: LineResult[], plan: BapliePlan | null = null
 }
 
 export function issuesForKey(screen: VoyageScreen, key: string): StowIssue[] {
-  return screen.byContainer.get(key.toUpperCase()) ?? [];
+  const raw = key.split("#")[0];
+  return screen.byContainer.get(containerKey(raw) || raw.toUpperCase()) ?? [];
 }
 
 export function worstSeverity(issues: StowIssue[]): IssueSeverity | null {

@@ -32,6 +32,15 @@ export interface HatchSpec {
   notes: string[];
 }
 
+type StowLike = {
+  bay: number;
+  row: number;
+  tier: number;
+  hatch: number;
+  onDeck: boolean;
+  fortyFoot: boolean;
+};
+
 /** 12 across on deck. */
 export const DECK_ROWS_12 = [12, 10, 8, 6, 4, 2, 1, 3, 5, 7, 9, 11];
 /** Hatch 1 (bays 1-2-3): 11 across with a CL 0 cell. */
@@ -39,7 +48,7 @@ export const DECK_ROWS_H1 = [10, 8, 6, 4, 2, 0, 1, 3, 5, 7, 9];
 /** Bay 38 missing the middle section. */
 export const DECK_ROWS_H10 = [12, 10, 8, 6, 4, 3, 5, 7, 9, 11];
 /** Inboard cells next to the Hatch 10 engine casing (not the whole cover). */
-export const CASING_ROWS_H10 = [0, 1, 2, 3, 4];
+export const CASING_ROWS_H10 = [4, 3];
 /** Every hold: 7 across with CL 0. */
 export const HOLD_ROWS_7 = [6, 4, 2, 0, 1, 3, 5];
 
@@ -233,13 +242,61 @@ export function rowsPortToStbd(rows: number[]): number[] {
   return [...even, ...cl, ...odd];
 }
 
-export function deckRowsFor(spec: HatchSpec, occupied: number[] = []): number[] {
-  return rowsPortToStbd([...spec.deckRowIds, ...occupied]);
+/** Real cover cells only — never invent Hatch 10 rows 0/1/2 or Hatch 9 hold. */
+export function deckRowsFor(spec: HatchSpec, _occupied: number[] = []): number[] {
+  return rowsPortToStbd([...spec.deckRowIds]);
 }
 
-export function holdRowsFor(spec: HatchSpec, occupied: number[] = []): number[] {
-  if (!spec.holdRowIds.length && !occupied.length) return [];
-  return rowsPortToStbd([...spec.holdRowIds, ...occupied]);
+export function holdRowsFor(spec: HatchSpec, _occupied: number[] = []): number[] {
+  if (!spec.holdRowIds.length) return [];
+  return rowsPortToStbd([...spec.holdRowIds]);
+}
+
+export function isRealRow(spec: HatchSpec, onDeck: boolean, row: number): boolean {
+  const ids = onDeck ? spec.deckRowIds : spec.holdRowIds;
+  return ids.includes(row);
+}
+
+/** Deck tiers start at 80. Extra 90/92 only when the voyage actually has them. */
+export function deckTiersFor(spec: HatchSpec, occupied: number[] = []): number[] {
+  const tiers: number[] = [];
+  for (let i = 0; i < spec.onDeckTiers; i++) tiers.push(80 + 2 * i);
+  for (const t of occupied) {
+    if ((t === 90 || t === 92) && !tiers.includes(t)) tiers.push(t);
+  }
+  return tiers.sort((a, b) => a - b);
+}
+
+/** Hold tiers start at 02. Hatch 9 is empty; Hatch 12 is four (02/04/06/08). */
+export function holdTiersFor(spec: HatchSpec): number[] {
+  if (!spec.holdTiers) return [];
+  const tiers: number[] = [];
+  for (let i = 0; i < spec.holdTiers; i++) tiers.push(2 + 2 * i);
+  return tiers;
+}
+
+/** 0 = fwd 20', 1 = 40' middle, 2 = aft 20'. */
+export function bayColumn(stow: Pick<StowLike, "bay">, spec: HatchSpec): 0 | 1 | 2 {
+  if (stow.bay === spec.bays[0]) return 0;
+  if (stow.bay === spec.bays[2]) return 2;
+  return 1;
+}
+
+/** Bays a box actually occupies. A 40' takes the whole 20'/40'/20' triple. */
+export function occupiedBays(stow: StowLike, spec?: HatchSpec): number[] {
+  const h = spec ?? hatchSpec(stow.hatch);
+  if (!h) return [stow.bay];
+  if (stow.fortyFoot) return [...h.bays];
+  return [stow.bay];
+}
+
+/** True when the 20'/40' footprints share a bay on the same hatch. */
+export function sameBayColumn(a: StowLike, b: StowLike): boolean {
+  if (a.hatch !== b.hatch) return false;
+  const spec = hatchSpec(a.hatch);
+  const oa = occupiedBays(a, spec);
+  const ob = occupiedBays(b, spec);
+  return oa.some((bay) => ob.includes(bay));
 }
 
 /** How many cells apart on the hatch line (port→stbd). 0 = same cell, 1 = neighbors. */

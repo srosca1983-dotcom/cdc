@@ -41,8 +41,9 @@ import { isLimitedQty } from "@/lib/cdc/limited.ts";
 import { CONTAINER_OPTIONS } from "@/lib/cdc/types.ts";
 import type { EvalResult, LineResult, ParseResult, VoyageInfo } from "@/lib/cdc/types.ts";
 import { cn } from "@/lib/utils";
-import { ShipBoard, ResponseIndex, ChemicalView } from "@/components/cdc/ship-board.tsx";
-import { sheetFor } from "@/lib/erg/guides.ts";
+import { ShipBoard, ChemicalView } from "@/components/cdc/ship-board.tsx";
+import { VoyageRisksView } from "@/components/cdc/voyage-risks.tsx";
+import { sheetFor, sheetSections } from "@/lib/erg/guides.ts";
 import { isBaplieFilename, looksLikeBaplie, parseBaplie } from "@/lib/baplie/parse.ts";
 import { SAMPLE_BAPLIE } from "@/lib/baplie/sample.ts";
 import { loadBaplie, saveBaplie } from "@/lib/baplie/store.ts";
@@ -94,17 +95,8 @@ export function Screener() {
           <ShipBoard parsed={parsed} result={result} baplie={baplie} />
         )}
         {tab === "ship" && !result && !baplie && <NeedVoyage onGo={() => setTab("manifest")} />}
-        {tab === "response" && result && !chem && (
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-xl font-medium">Spill and fire sheets</h2>
-              <p className="mt-1 text-sm text-muted">
-                Every UN on this voyage. Press a line for how it looks, how it burns, and
-                what to do on GEORGE II.
-              </p>
-            </div>
-            <ResponseIndex lines={result.lines} onOpen={setChem} />
-          </div>
+        {tab === "response" && (result || baplie) && !chem && (
+          <VoyageRisksView result={result} baplie={baplie} onOpen={setChem} />
         )}
         {tab === "response" && chem && (
           <ChemicalView
@@ -112,7 +104,7 @@ export function Screener() {
             onBack={() => setChem(null)}
           />
         )}
-        {tab === "response" && !result && <NeedVoyage onGo={() => setTab("manifest")} />}
+        {tab === "response" && !result && !baplie && <NeedVoyage onGo={() => setTab("manifest")} />}
         {tab === "lookup" && <LookupPanel />}
         {tab === "rules" && <RulesPanel />}
       </main>
@@ -131,16 +123,16 @@ function Header({ tab, onTab, hasVoyage }: { tab: Tab; onTab: (t: Tab) => void; 
             </span>
             <div>
               <p className="font-mono text-[11px] tracking-[0.18em] text-primary-foreground/60 uppercase">
-                Container ship · USCG eNOAD · 33 CFR 160.202
+                Container ship · DCM + BAPLIE · 33 CFR 160.202
               </p>
               <h1 className="mt-1 text-xl font-medium tracking-tight sm:text-2xl">
-                Certain Dangerous Cargo for the Master
+                Cargo and DCM Viewer
               </h1>
               <p className="mt-1 max-w-2xl text-sm text-primary-foreground/70">
                 Drop the Excel DCM, the Word FINAL DCM, and the printed manifest.
-                CDC is screened from that voyage. BAPLIE is optional — drop it when you
-                want reefers and the rest of the bay plan.
-
+                Stow and CDC come from that voyage. BAPLIE is optional. Open
+                What can go wrong for fire, explosion, toxic vapor, wetting, hold
+                entry, lost boxes, and the rest.
               </p>
             </div>
           </div>
@@ -148,12 +140,12 @@ function Header({ tab, onTab, hasVoyage }: { tab: Tab; onTab: (t: Tab) => void; 
             Container ships only
           </Badge>
         </div>
-        <nav className="flex flex-wrap gap-1 rounded-lg bg-navy-2 p-1" aria-label="Primary">
+        <nav className="flex flex-wrap gap-1 overflow-x-auto rounded-lg bg-navy-2 p-1" aria-label="Primary">
           {(
             [
               ["manifest", "Manifest"],
               ["ship", "Ship"],
-              ["response", "Spill / fire"],
+              ["response", "What can go wrong"],
               ["lookup", "UN lookup"],
               ["rules", "33 CFR 160.202"],
             ] as const
@@ -163,7 +155,7 @@ function Header({ tab, onTab, hasVoyage }: { tab: Tab; onTab: (t: Tab) => void; 
               type="button"
               onClick={() => onTab(id)}
               className={cn(
-                "h-10 flex-1 rounded-md px-3 text-sm font-medium transition-colors duration-150 sm:flex-none sm:px-5",
+                "h-10 shrink-0 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors duration-150 sm:px-5",
                 tab === id
                   ? "bg-surface text-ink"
                   : "text-primary-foreground/70 hover:text-primary-foreground",
@@ -1275,7 +1267,35 @@ function LookupPanel() {
           ) : null}
         </section>
       ) : null}
+
+      {row ? <LookupSheet un={row.un} cls={row.hazClass} name={row.name} /> : null}
     </div>
+  );
+}
+
+function LookupSheet({ un, cls, name }: { un: string; cls: string; name: string }) {
+  const sheet = sheetFor(un, cls, name);
+  const sections = sheetSections(sheet);
+  return (
+    <section className="rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
+      <p className="font-mono text-[11px] tracking-wide text-accent uppercase">
+        {sheet.guide} · Class {sheet.cls}
+      </p>
+      <h2 className="mt-2 text-base font-medium">What can go wrong — UN {sheet.un}</h2>
+      <p className="mt-1 text-sm text-muted">{sheet.looksLike}</p>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {sections.map((s) => (
+          <article key={s.title}>
+            <h3 className="text-sm font-medium">{s.title}</h3>
+            <ul className="mt-1 space-y-1 text-sm text-muted">
+              {s.items.map((t) => (
+                <li key={t}>— {t}</li>
+              ))}
+            </ul>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 

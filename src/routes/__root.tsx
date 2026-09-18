@@ -3,7 +3,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "CDC eNOAD Screener";
+const APP_NAME = "Cargo and DCM Viewer";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -14,7 +14,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "Screen a dangerous cargo manifest against 33 CFR 160.202 Certain Dangerous Cargo rules for USCG eNOAD reporting.",
+          "Screen a container-ship DCM and optional BAPLIE: CDC for eNOAD, stow, and everything that can go wrong with dangerous cargo.",
       },
       { name: "theme-color", content: "#1a2836" },
     ],

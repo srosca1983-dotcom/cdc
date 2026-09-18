@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, Flame } from "lucide-react";
+import { ArrowLeft, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { sheetFor, type ErgSheet } from "@/lib/erg/guides.ts";
+import { sheetFor, sheetSections, type ErgSheet } from "@/lib/erg/guides.ts";
 import { HATCHES, SHIP_NOTES, VESSEL, deckRowsFor, holdRowsFor, deckTiersFor, holdTiersFor, occupiedBays } from "@/lib/ship/george-ii.ts";
 import {
   hatchBuckets,
@@ -754,7 +754,7 @@ function CargoLine({
           onClick={() => onChem({ un: d.line.un, cls: d.line.hazClass, name: d.line.name })}
           className="inline-flex h-10 items-center gap-2 rounded-md bg-navy px-3 text-sm text-primary-foreground"
         >
-          <Flame className="size-4" /> Spill / fire
+          <TriangleAlert className="size-4" /> What can go wrong
         </button>
       </div>
     </li>
@@ -850,7 +850,7 @@ function ContainerView({
                   onClick={() => onChem({ un: dg.un, cls: dg.cls, name: dg.name })}
                   className="mt-2 inline-flex h-10 items-center gap-2 rounded-md bg-navy px-3 text-sm text-primary-foreground"
                 >
-                  <Flame className="size-4" /> Spill / fire
+                  <TriangleAlert className="size-4" /> What can go wrong
                 </button>
               ) : null}
             </li>
@@ -867,6 +867,7 @@ function ContainerView({
 }
 
 export function ChemicalView({ sheet, onBack }: { sheet: ErgSheet; onBack: () => void }) {
+  const sections = sheetSections(sheet);
   return (
     <div className="space-y-5">
       <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm text-accent">
@@ -880,14 +881,12 @@ export function ChemicalView({ sheet, onBack }: { sheet: ErgSheet; onBack: () =>
         <h2 className="mt-1 text-xl font-medium">{sheet.name}</h2>
         <p className="mt-2 text-sm text-muted">{sheet.looksLike}</p>
       </div>
-      <SheetBlock title="Hazards" items={sheet.hazards} />
-      <SheetBlock title="Fire" items={sheet.fire} />
-      <SheetBlock title="Spill" items={sheet.spill} />
-      <SheetBlock title="PPE" items={sheet.ppe} />
-      <SheetBlock title="First aid" items={sheet.firstAid} />
-      <SheetBlock title="On GEORGE II" items={sheet.ship} />
+      {sections.map((s) => (
+        <SheetBlock key={s.title} title={s.title} items={s.items} />
+      ))}
       <p className="text-xs text-subtle">
-        Public ERG actions for a container ship. Confirm against the SDS, EmS, and the
+        Public ERG actions for a container ship — fire, spill, explosion, vapor, wetting,
+        hold entry, lost overboard, pollution. Confirm against the SDS, EmS, and the
         Master’s orders before you commit people.
       </p>
     </div>

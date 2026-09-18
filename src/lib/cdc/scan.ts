@@ -43,7 +43,7 @@ export function categoryScan(result: EvalResult): ScanItem[] {
 
   return [
     item("p1", "1.1 / 1.2 explosives", (l) => starts(l, /^1\.[12]/), "{n} on board — still CDC at any qty (check class)"),
-    item("p2", "1.5D (176.415 permit)", (l) => starts(l, /^1\.5/), "{n} on board, not in combustible bags"),
+    item("p2", "1.5D (176.415 permit)", (l) => starts(l, /^1\.5D/) || l.paragraphs.includes("160.202(2)"), "{n} on board, not in combustible bags"),
     item(
       "p3",
       "2.3 PIH gas > 1 MT",

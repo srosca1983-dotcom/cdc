@@ -38,6 +38,27 @@ describe("normalize + parse", () => {
     assert.equal(result.lines[0].verdict, "CDC");
     assert.equal(result.lines[0].pih, true);
   });
+
+  it("treats a unitless number as pounds, matching DEFAULT_OPTIONS", () => {
+    const under = parseManifest("UN,Class,Pkg,Qty\n1017,2.3,CYL,2200");
+    assert.ok(under.lines[0].quantityKg !== null && under.lines[0].quantityKg < 1000);
+    const over = parseManifest("UN,Class,Pkg,Qty\n1017,2.3,CYL,2500");
+    const result = evaluateManifest(over.lines, DEFAULT_OPTIONS);
+    assert.ok(over.lines[0].quantityKg !== null && over.lines[0].quantityKg > 1000);
+    assert.equal(result.lines[0].verdict, "CDC");
+  });
+
+  it("prefers net quantity and ignores a Gross Weight column", () => {
+    const parsed = parseManifest(
+      "UN,Class,Gross Weight,Net Qty\n1017,2.3,5000 kg,50 kg",
+    );
+    assert.equal(parsed.lines[0].quantityKg, 50);
+  });
+
+  it("does not use Gross Weight when it is the only weight column", () => {
+    const parsed = parseManifest("UN,Class,Gross Weight kg\n1017,2.3,5000");
+    assert.equal(parsed.lines[0].quantityKg, null);
+  });
 });
 
 describe("33 CFR 160.202 engine vs v1.0 HTML rules", () => {
@@ -152,7 +173,7 @@ describe("33 CFR 160.202 engine vs v1.0 HTML rules", () => {
     assert.ok(line.paragraphs.includes("160.202(1)"));
   });
 
-  it("flags 1.5D in bags as CDC and rigid 1.5 as review", () => {
+  it("flags 1.5D in bags as CDC and rigid 1.5D as review", () => {
     const bag = evaluateSingle({
       un: "0332",
       hazClass: "1.5D",
@@ -168,6 +189,18 @@ describe("33 CFR 160.202 engine vs v1.0 HTML rules", () => {
     assert.equal(bag.verdict, "CDC");
     assert.ok(bag.paragraphs.includes("160.202(2)"));
     assert.equal(box.verdict, "REVIEW");
+  });
+
+  it("does not treat a non-D Division 1.5 as paragraph (2)", () => {
+    const line = evaluateSingle({
+      un: "0483",
+      hazClass: "1.5C",
+      packaging: "BAG",
+      quantityKg: 800,
+    });
+    assert.notEqual(line.verdict, "CDC");
+    assert.ok(!line.paragraphs.includes("160.202(2)"));
+    assert.equal(line.verdict, "REVIEW");
   });
 
   it("treats bulk LNG as CDC under (7)", () => {
@@ -330,23 +363,31 @@ describe("33 CFR 160.202 engine vs v1.0 HTML rules", () => {
     assert.ok(!line.paragraphs.includes("160.202(9)"));
   });
 
-  it("combines different 2.3 UNs across the 1 MT vessel threshold", () => {
+  it("does not mix different 2.3 UNs into one 1 MT total", () => {
     const parsed = parseManifest(
       "UN,Class,Pkg,Qty\n1005,2.3,CYL,600 kg\n1017,2.3,CYL,500 kg",
     );
     const result = evaluateManifest(parsed.lines, DEFAULT_OPTIONS);
-    assert.equal(result.lines[0].verdict, "CDC");
-    assert.equal(result.lines[1].verdict, "CDC");
-    assert.ok(result.notes.some((n) => /2\.3 PIH vessel total/i.test(n)));
+    assert.equal(result.lines[0].verdict, "NOT_CDC");
+    assert.equal(result.lines[1].verdict, "NOT_CDC");
   });
 
-  it("combines different packaged PIH liquid UNs across the 20 MT vessel threshold", () => {
+  it("does not mix different packaged PIH liquids into one 20 MT total", () => {
     const parsed = parseManifest(
       "UN,Class,Pkg,Qty\n1098,6.1,BOX,12000 kg\n1143,6.1,BOX,9000 kg",
     );
     const result = evaluateManifest(parsed.lines, DEFAULT_OPTIONS);
-    assert.equal(result.lines[0].verdict, "CDC");
-    assert.equal(result.lines[1].verdict, "CDC");
+    assert.equal(result.lines[0].verdict, "NOT_CDC");
+    assert.equal(result.lines[1].verdict, "NOT_CDC");
+  });
+
+  it("keeps small 2.3 cylinders off the eNOAD when another 2.3 UN is over 1 MT", () => {
+    const parsed = parseManifest(WORKED_SAMPLE);
+    const result = evaluateManifest(parsed.lines, DEFAULT_OPTIONS);
+    const byUn = Object.fromEntries(result.lines.map((l) => [l.un, l]));
+    assert.equal(byUn["1005"].verdict, "CDC");
+    assert.equal(byUn["1017"].verdict, "NOT_CDC");
+    assert.equal(byUn["1079"].verdict, "NOT_CDC");
   });
 
   it("treats Hazard Zone on the shipping paper as known PIH", () => {
@@ -369,5 +410,17 @@ describe("33 CFR 160.202 engine vs v1.0 HTML rules", () => {
     });
     assert.equal(carton.verdict, "NOT_CDC");
     assert.equal(carton.pih, true);
+  });
+
+  it("treats a Pasha TO code as a tote / IBC for the (5) bulk-packaging test", () => {
+    const line = evaluateSingle({
+      un: "1098",
+      hazClass: "6.1",
+      packaging: "1 TO",
+      quantityKg: 500,
+    });
+    assert.equal(line.packForm, "bulk_packaging");
+    assert.equal(line.verdict, "CDC");
+    assert.ok(line.paragraphs.includes("160.202(5)"));
   });
 });

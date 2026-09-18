@@ -44,7 +44,8 @@ describe("Pasha package codes", () => {
   it("maps CN / CY / BG / TK on a container ship", () => {
     assert.equal(classifyPackaging("10 CN", "containerized"), "rigid");
     assert.equal(classifyPackaging("7 CY", "containerized"), "cylinder");
-    assert.equal(classifyPackaging("1 TO", "containerized"), "rigid");
+    assert.equal(classifyPackaging("1 TO", "containerized"), "bulk_packaging");
+    assert.equal(classifyPackaging("1 TOTE", "containerized"), "bulk_packaging");
     assert.equal(classifyPackaging("40 BG", "containerized"), "combustible_bag");
     assert.equal(classifyPackaging("1 TK", "containerized"), "bulk_packaging");
     assert.equal(classifyPackaging("1 CARTON", "containerized"), "rigid");

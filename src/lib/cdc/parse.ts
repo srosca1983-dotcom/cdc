@@ -1,4 +1,5 @@
 import type { LineInput, ParseResult, QtyUnit, VoyageInfo } from "./types.ts";
+import { DEFAULT_OPTIONS } from "./types.ts";
 import { parseQuantityToKg } from "./quantity.ts";
 import {
   looksLikeCombinedHazmat,
@@ -42,15 +43,14 @@ const PKG_ALIASES = [
   /^package$/,
 ];
 const QTY_ALIASES = [
-  /weight\s*lbs?/,
   /net\s*(wt|weight|qty|mass|kgs?)?/,
+  /weight\s*lbs?/,
   /quantity/,
   /^kgs?$/,
   /^lbs?$/,
-  /weight\s*(kg|kgs|net)?/,
-  /gross\s*(wt|weight|kgs?)?/,
-  /^mass$/,
+  /weight\s*(kg|kgs|net)/,
   /qty\s*(kg|kgs|mt)?/,
+  /^mass$/,
 ];
 const PG_ALIASES = [/pack(ing)?\s*group/, /^pg$/];
 const SUB_ALIASES = [/subsid/, /sub\s*risk/, /secondary\s*(class|risk)/, /sub\s*haz/];
@@ -73,6 +73,22 @@ function bestCol(header: string[], aliases: RegExp[]): number {
   let bestScore = 0;
   header.forEach((h, i) => {
     const s = scoreAliases(h, aliases);
+    if (s > bestScore) {
+      bestScore = s;
+      best = i;
+    }
+  });
+  return best;
+}
+
+/** CDC quantity is net. Never take a Gross Weight column. */
+function bestQtyCol(header: string[]): number {
+  let best = -1;
+  let bestScore = 0;
+  header.forEach((h, i) => {
+    const c = h.toLowerCase().replace(/[_./]+/g, " ").trim();
+    if (/\bgross\b/.test(c)) return;
+    const s = scoreAliases(h, QTY_ALIASES);
     if (s > bestScore) {
       bestScore = s;
       best = i;
@@ -200,7 +216,7 @@ function buildLine(row: string[], rowIndex: number, cols: ColMap, unitGuess: Qty
   };
 }
 
-export function parseRowMatrix(rawRows: string[][], defaultQtyUnit: QtyUnit = "kg"): ParseResult {
+export function parseRowMatrix(rawRows: string[][], defaultQtyUnit: QtyUnit = DEFAULT_OPTIONS.defaultQtyUnit): ParseResult {
   const warnings: string[] = [];
   const voyage = extractVoyage(rawRows);
 
@@ -228,7 +244,7 @@ export function parseRowMatrix(rawRows: string[][], defaultQtyUnit: QtyUnit = "k
   let nameCol = headerIdx >= 0 ? bestCol(header, NAME_ALIASES) : 1;
   let hazCol = headerIdx >= 0 ? bestCol(header, CLASS_ALIASES) : 2;
   let pkgCol = headerIdx >= 0 ? bestCol(header, PKG_ALIASES) : 3;
-  const qtyCol = headerIdx >= 0 ? bestCol(header, QTY_ALIASES) : -1;
+  const qtyCol = headerIdx >= 0 ? bestQtyCol(header) : -1;
   const pgCol = headerIdx >= 0 ? bestCol(header, PG_ALIASES) : -1;
   const subCol = headerIdx >= 0 ? bestCol(header, SUB_ALIASES) : -1;
   const containerCol = headerIdx >= 0 ? bestCol(header, CONTAINER_ALIASES) : -1;
@@ -452,7 +468,7 @@ export function coalesceVoyage(parts: VoyageInfo[], filename?: string): VoyageIn
   return pickVoyage(...parts, fromFile);
 }
 
-export function parseManifest(text: string, defaultQtyUnit: QtyUnit = "kg"): ParseResult {
+export function parseManifest(text: string, defaultQtyUnit: QtyUnit = DEFAULT_OPTIONS.defaultQtyUnit): ParseResult {
   const trimmed = text.replace(/^\uFEFF/, "").trim();
   if (!trimmed) {
     return {

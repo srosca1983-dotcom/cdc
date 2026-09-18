@@ -31,9 +31,9 @@ export const RULE_CARDS: RuleCard[] = [
     paragraph: "160.202(3)",
     title: "Division 2.3 PIH gas",
     summary:
-      "A Division 2.3 poisonous gas that is also poisonous by inhalation is CDC only when the quantity of all such 2.3 PIH on the vessel exceeds 1 metric ton. Totals combine every 2.3 PIH UN on board, not each UN separately. A few cylinders of chlorine are not CDC. An ISO tank of anhydrous ammonia usually is.",
-    threshold: "> 1 metric ton per vessel (all 2.3 PIH combined)",
-    commonMiss: "UN 1005 / 1017 / 1079 are not automatic CDC — add the vessel total first. Two different 2.3 UNs that each sit under 1 MT can still be CDC together.",
+      "A Division 2.3 poisonous gas that is also poisonous by inhalation is CDC only when the quantity of that cargo on the vessel exceeds 1 metric ton. Totals are per UN — ammonia and chlorine each have their own 1 MT line. A few cylinders of chlorine are not CDC. An ISO tank of anhydrous ammonia usually is.",
+    threshold: "> 1 metric ton per vessel, per UN",
+    commonMiss: "UN 1005 / 1017 / 1079 are not automatic CDC — add that UN's vessel total first. Do not mix different 2.3 gases together.",
   },
   {
     id: "p4",
@@ -49,9 +49,9 @@ export const RULE_CARDS: RuleCard[] = [
     paragraph: "160.202(5)",
     title: "Liquid 6.1 PIH",
     summary:
-      "A liquid with a primary or subsidiary Division 6.1 classification that is poisonous by inhalation is CDC if it is in bulk packaging (portable tank, IBC) or, when not in bulk packaging, if the vessel total of packaged PIH liquid exceeds 20 metric tons. Totals combine every PIH liquid UN on board. Ordinary 6.1 (oral/dermal toxic) is not CDC. A 5 lb carton of UN 2810 is almost never CDC.",
-    threshold: "Bulk packaging, or > 20 MT packaged (all PIH liquid combined)",
-    commonMiss: "Class 6.1 on the DCM is not enough — it must be PIH, and packaged lots have a 20 MT floor.",
+      "A liquid with a primary or subsidiary Division 6.1 classification that is poisonous by inhalation is CDC if it is in bulk packaging (portable tank, IBC, tote) or, when not in bulk packaging, if the vessel total of that UN exceeds 20 metric tons. Totals are per UN. Ordinary 6.1 (oral/dermal toxic) is not CDC. A 5 lb carton of UN 2810 is almost never CDC.",
+    threshold: "Bulk packaging, or > 20 MT packaged, per UN",
+    commonMiss: "Class 6.1 on the DCM is not enough — it must be PIH, and packaged lots have a 20 MT floor. Do not mix different PIH liquids together.",
   },
   {
     id: "p6",

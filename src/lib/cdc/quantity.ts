@@ -59,3 +59,5 @@ function trimNum(n: number): string {
 
 export const ONE_METRIC_TON_KG = 1000;
 export const TWENTY_METRIC_TON_KG = 20_000;
+/** 33 CFR 160.202 CDC residue (1) — bulk AN leftover cap. */
+export const ONE_THOUSAND_POUNDS_KG = 1000 * LB_TO_KG;

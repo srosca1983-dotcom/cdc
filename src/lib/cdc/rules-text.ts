@@ -31,9 +31,9 @@ export const RULE_CARDS: RuleCard[] = [
     paragraph: "160.202(3)",
     title: "Division 2.3 PIH gas",
     summary:
-      "A Division 2.3 poisonous gas that is also poisonous by inhalation is CDC only when the quantity of that cargo on the vessel exceeds 1 metric ton. A few cylinders of chlorine are not CDC. An ISO tank of anhydrous ammonia usually is.",
-    threshold: "> 1 metric ton per vessel",
-    commonMiss: "UN 1005 / 1017 / 1079 are not automatic CDC — add the vessel total first.",
+      "A Division 2.3 poisonous gas that is also poisonous by inhalation is CDC only when the quantity of all such 2.3 PIH on the vessel exceeds 1 metric ton. Totals combine every 2.3 PIH UN on board, not each UN separately. A few cylinders of chlorine are not CDC. An ISO tank of anhydrous ammonia usually is.",
+    threshold: "> 1 metric ton per vessel (all 2.3 PIH combined)",
+    commonMiss: "UN 1005 / 1017 / 1079 are not automatic CDC — add the vessel total first. Two different 2.3 UNs that each sit under 1 MT can still be CDC together.",
   },
   {
     id: "p4",
@@ -49,8 +49,8 @@ export const RULE_CARDS: RuleCard[] = [
     paragraph: "160.202(5)",
     title: "Liquid 6.1 PIH",
     summary:
-      "A liquid with a primary or subsidiary Division 6.1 classification that is poisonous by inhalation is CDC if it is in bulk packaging (portable tank, IBC) or, when not in bulk packaging, if the vessel total exceeds 20 metric tons. Ordinary 6.1 (oral/dermal toxic) is not CDC. A 5 lb carton of UN 2810 is almost never CDC.",
-    threshold: "Bulk packaging, or > 20 MT packaged",
+      "A liquid with a primary or subsidiary Division 6.1 classification that is poisonous by inhalation is CDC if it is in bulk packaging (portable tank, IBC) or, when not in bulk packaging, if the vessel total of packaged PIH liquid exceeds 20 metric tons. Totals combine every PIH liquid UN on board. Ordinary 6.1 (oral/dermal toxic) is not CDC. A 5 lb carton of UN 2810 is almost never CDC.",
+    threshold: "Bulk packaging, or > 20 MT packaged (all PIH liquid combined)",
     commonMiss: "Class 6.1 on the DCM is not enough — it must be PIH, and packaged lots have a 20 MT floor.",
   },
   {
@@ -85,9 +85,9 @@ export const RULE_CARDS: RuleCard[] = [
     paragraph: "160.202(9)",
     title: "Bulk ammonium nitrate solids",
     summary:
-      "Ammonium nitrate and AN-based fertilizer listed as Division 5.1, when carried in bulk in the ship’s holds. Bagged AN on a container ship is evaluated under (4), not (9).",
-    threshold: "Carried in bulk as Division 5.1 — not used here",
-    commonMiss: "Containerized bags of UN 1942 are a permit test, not a bulk-solid CDC.",
+      "Ammonium nitrate and AN-based fertilizer listed as Division 5.1, when carried in bulk in the ship’s holds. Bagged AN on a container ship is evaluated under (4), not (9). After discharge, leftover bulk AN is CDC residue only at ≤ 1,000 lb total and not piled in pockets over 2 cubic feet; more than that is still CDC.",
+    threshold: "Carried in bulk as Division 5.1 — residue only ≤ 1,000 lb / 2 cu ft",
+    commonMiss: "Containerized bags of UN 1942 are a permit test, not a bulk-solid CDC. Residue is not 'whatever is left' — the 1,000 lb cap is in the definition.",
   },
 ];
 

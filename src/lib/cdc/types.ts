@@ -71,6 +71,8 @@ export interface LineInput {
   booking?: string;
   technicalName?: string;
   limitedQty?: boolean;
+  /** Hazard Zone A–D from the shipping paper, if a column or the name carries it. */
+  hazardZone?: string;
 }
 
 export interface LineResult {

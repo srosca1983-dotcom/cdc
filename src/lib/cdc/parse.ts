@@ -58,6 +58,7 @@ const CONTAINER_ALIASES = [/^container$/, /^cntr$/, /^unit\s*no/];
 const BOOKING_ALIASES = [/^booking$/, /^bkg$/];
 const TECH_ALIASES = [/technical\s*name/, /tech\s*name/];
 const LTD_ALIASES = [/limited\s*q/, /ltd\s*qty/, /^lq$/, /limit(ed)?\s*quant/];
+const ZONE_ALIASES = [/hazard\s*zone/, /^zone$/, /pih\s*zone/, /inhalation\s*zone/];
 
 function scoreAliases(cell: string, aliases: RegExp[]): number {
   const c = cell.toLowerCase().replace(/[_./]+/g, " ").trim();
@@ -139,10 +140,22 @@ interface ColMap {
   bookingCol: number;
   techCol: number;
   ltdCol: number;
+  zoneCol: number;
 }
 
 function at(row: string[], i: number): string {
   return i >= 0 && i < row.length ? (row[i] ?? "").trim() : "";
+}
+
+function extractHazardZone(...texts: string[]): string {
+  for (const t of texts) {
+    if (!t) continue;
+    const col = t.trim().toUpperCase();
+    if (/^[A-D]$/.test(col)) return col;
+    const m = t.match(/(?:hazard\s*)?zone\s*([A-D])\b/i);
+    if (m) return m[1].toUpperCase();
+  }
+  return "";
 }
 
 function buildLine(row: string[], rowIndex: number, cols: ColMap, unitGuess: QtyUnit): LineInput | null {
@@ -183,6 +196,7 @@ function buildLine(row: string[], rowIndex: number, cols: ColMap, unitGuess: Qty
     booking: at(row, cols.bookingCol) || undefined,
     technicalName: at(row, cols.techCol) || undefined,
     limitedQty: limitedQty || undefined,
+    hazardZone: extractHazardZone(at(row, cols.zoneCol), combined?.name || nameFromCol, at(row, cols.techCol)) || undefined,
   };
 }
 
@@ -221,6 +235,7 @@ export function parseRowMatrix(rawRows: string[][], defaultQtyUnit: QtyUnit = "k
   const bookingCol = headerIdx >= 0 ? bestCol(header, BOOKING_ALIASES) : -1;
   const techCol = headerIdx >= 0 ? bestCol(header, TECH_ALIASES) : -1;
   const ltdCol = headerIdx >= 0 ? bestCol(header, LTD_ALIASES) : -1;
+  const zoneCol = headerIdx >= 0 ? bestCol(header, ZONE_ALIASES) : -1;
 
   let unitGuess = defaultQtyUnit;
   const qtyHeader = (header[qtyCol] || "").toLowerCase();
@@ -253,6 +268,7 @@ export function parseRowMatrix(rawRows: string[][], defaultQtyUnit: QtyUnit = "k
     bookingCol,
     techCol,
     ltdCol,
+    zoneCol,
   };
   const start = headerIdx >= 0 ? headerIdx + 1 : 0;
   const lines: LineInput[] = [];

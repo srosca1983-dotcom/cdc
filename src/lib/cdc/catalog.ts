@@ -2,7 +2,9 @@ import type { CatalogEntry, CatalogFlag } from "./types.ts";
 
 /**
  * Compact UN catalog for 33 CFR 160.202 screening.
- * Flags encode the regulatory hooks; unknown UNs still evaluate via class rules.
+ * Flags encode the regulatory hooks; this is not a copy of 49 CFR 172.101.
+ * Unknown UNs still evaluate via class rules. Missing PIH zone data produces
+ * REVIEW, not a silent NOT_CDC.
  *
  * Format: UN|Proper shipping name|class|flag,flag|zone
  */
@@ -45,30 +47,41 @@ const RAW = `
 1098|Allyl alcohol|6.1|pih_liquid,named_bulk_liquid|B
 1135|Ethylene chlorohydrin|6.1|pih_liquid,named_bulk_liquid|B
 1143|Crotonaldehyde or crotonaldehyde, stabilized|6.1|pih_liquid,named_bulk_liquid|B
+1163|Dimethylhydrazine, unsymmetrical|6.1|pih_liquid|B
 1182|Ethyl chloroformate|6.1|pih_liquid|A
+1185|Ethyleneimine, stabilized|6.1|pih_liquid|A
 1238|Methyl chloroformate|6.1|pih_liquid|A
 1239|Methyl chloromethyl ether|6.1|pih_liquid|A
 1244|Methylhydrazine|6.1|pih_liquid|A
 1251|Methyl vinyl ketone, stabilized|6.1|pih_liquid|A
+1259|Nickel carbonyl|6.1|pih_liquid|A
 1280|Propylene oxide|3|named_bulk_liquid|
+1380|Pentaborane|4.2|pih_liquid|A
+1510|Tetranitromethane|5.1|pih_liquid|B
 1541|Acetone cyanohydrin, stabilized|6.1|pih_liquid,named_bulk_liquid|B
 1556|Arsenic compound, liquid, n.o.s.|6.1|pih_liquid|
 1560|Arsenic trichloride|6.1|pih_liquid|A
+1569|Bromoacetone|6.1|pih_liquid|B
 1580|Chloropicrin|6.1|pih_liquid|A
 1589|Cyanogen chloride, stabilized|2.3|pih_gas|A
 1595|Dimethyl sulfate|6.1|pih_liquid|B
 1605|Ethylene dibromide|6.1|pih_liquid,named_bulk_liquid|B
 1614|Hydrogen cyanide, stabilized (absorbed)|6.1|pih_liquid|A
 1647|Methyl bromide and ethylene dibromide mixture|6.1|pih_liquid|B
+1649|Motor fuel anti-knock mixture|6.1|pih_liquid|B
 1660|Nitric oxide, compressed|2.3|pih_gas|A
 1670|Perchloromethyl mercaptan|6.1|pih_liquid|B
 1695|Chloroacetone, stabilized|6.1|pih_liquid|A
+1722|Allyl chloroformate|6.1|pih_liquid|A
 1741|Boron trichloride|2.3|pih_gas|C
 1744|Bromine|8|pih_liquid|A
+1745|Bromine pentafluoride|5.1|pih_liquid|A
+1746|Bromine trifluoride|5.1|pih_liquid|A
 1749|Chlorine trifluoride|2.3|pih_gas|B
 1754|Chlorosulfonic acid|8|named_bulk_liquid,pih_liquid|B
 1809|Phosphorus trichloride|6.1|pih_liquid|B
 1810|Phosphorus oxychloride|6.1|pih_liquid|B
+1829|Sulfur trioxide, stabilized|8|pih_liquid|A
 1831|Sulfuric acid, fuming (oleum)|8|named_bulk_liquid|
 1834|Sulfuryl chloride|8|pih_liquid|B
 1838|Titanium tetrachloride|8|pih_liquid|B
@@ -86,6 +99,7 @@ const RAW = `
 1975|Nitric oxide and dinitrogen tetroxide mixture|2.3|pih_gas|A
 1978|Propane|2.1|bulk_lpgas|
 1994|Iron pentacarbonyl|6.1|pih_liquid|A
+2032|Nitric acid, red fuming|8|pih_liquid|B
 2067|Ammonium nitrate based fertilizer|5.1|an_fertilizer|
 2071|Ammonium nitrate based fertilizer|9||
 2188|Arsine|2.3|pih_gas|A
@@ -111,6 +125,8 @@ const RAW = `
 2420|Hexafluoroacetone|2.3|pih_gas|B
 2421|Nitrogen trioxide|2.3|pih_gas|A
 2426|Ammonium nitrate, liquid|5.1|an_other|
+2438|Trimethylacetyl chloride|6.1|pih_liquid|B
+2442|Trichloroacetyl chloride|8|pih_liquid|B
 2474|Thiophosgene|6.1|pih_liquid|B
 2477|Methyl isothiocyanate|6.1|pih_liquid|B
 2480|Methyl isocyanate|6.1|pih_liquid|A
@@ -136,6 +152,7 @@ const RAW = `
 2742|Chloroformates, toxic, corrosive, flammable, n.o.s.|6.1|pih_liquid|
 2743|n-Butyl chloroformate|6.1|pih_liquid|B
 2810|Toxic liquid, organic, n.o.s.|6.1||
+2826|Ethyl chlorothioformate|8|pih_liquid|B
 2901|Bromine chloride|2.3|pih_gas|B
 2908|Radioactive material, excepted package, empty packaging|7|rad_excepted|
 2909|Radioactive material, excepted package, articles|7|rad_excepted|
@@ -195,6 +212,10 @@ const RAW = `
 3389|Toxic by inhalation liquid, corrosive, n.o.s. (Zone A)|6.1|pih_liquid|A
 3390|Toxic by inhalation liquid, corrosive, n.o.s. (Zone B)|6.1|pih_liquid|B
 3483|Motor fuel anti-knock mixture, flammable|6.1|pih_liquid|
+3488|Toxic by inhalation liquid, flammable, corrosive, n.o.s. (Zone A)|6.1|pih_liquid|A
+3489|Toxic by inhalation liquid, flammable, corrosive, n.o.s. (Zone B)|6.1|pih_liquid|B
+3490|Toxic by inhalation liquid, water-reactive, flammable, n.o.s. (Zone A)|6.1|pih_liquid|A
+3491|Toxic by inhalation liquid, water-reactive, flammable, n.o.s. (Zone B)|6.1|pih_liquid|B
 3507|Uranium hexafluoride, radioactive material, excepted package|7|rad_excepted|
 0331|Explosive, blasting, Type B|1.5D|expl_15d|
 0332|Explosive, blasting, Type E|1.5D|expl_15d|
@@ -246,4 +267,25 @@ export function lookupUn(un: string): CatalogEntry | undefined {
 
 export function hasFlag(entry: CatalogEntry | undefined, flag: CatalogFlag): boolean {
   return Boolean(entry?.flags.includes(flag));
+}
+
+const PIH_PAPERS =
+  /\b(PIH|TIH|poison(?:ous)?\s+by\s+inhalation|toxic\s+by\s+inhalation|inhalation\s+hazard)\b/i;
+const ZONE_PAPERS = /(?:hazard\s*)?zone\s*([A-D])\b/i;
+
+/** PIH / Hazard Zone taken from the shipping paper when the UN is not in the hook list. */
+export function detectPihFromPapers(line: {
+  name?: string;
+  technicalName?: string;
+  hazardZone?: string;
+  raw?: string[];
+}): { pih: boolean; zone?: string } {
+  const zoneCol = (line.hazardZone ?? "").trim().toUpperCase();
+  if (/^[A-D]$/.test(zoneCol)) return { pih: true, zone: zoneCol };
+
+  const blob = [line.name, line.technicalName, ...(line.raw ?? [])].filter(Boolean).join("\n");
+  const zm = blob.match(ZONE_PAPERS);
+  if (zm) return { pih: true, zone: zm[1].toUpperCase() };
+  if (PIH_PAPERS.test(blob)) return { pih: true };
+  return { pih: false };
 }

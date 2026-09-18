@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { masterEmail, enoadPasteBlock, NO_CDC_PASTE, emailFilename } from "./email.ts";
 import { evaluateManifest } from "./evaluate.ts";
 import { parseCombinedHazmat } from "./imdg.ts";
@@ -14,8 +16,9 @@ import { CONTAINER_OPTIONS } from "./types.ts";
 import { parseXlsxArrayBuffer } from "./xlsx.ts";
 import { compareManifests, selectPreferred } from "./compare.ts";
 
-const XLSX_PATH = "/workspace/attachments/DCM G2069W.xlsx";
-const PDF_PATH = "/workspace/attachments/GEORGE II 069W HAZ MANIFEST.pdf";
+const ATTACH = join(dirname(fileURLToPath(import.meta.url)), "../../../attachments");
+const XLSX_PATH = join(ATTACH, "DCM G2069W.xlsx");
+const PDF_PATH = join(ATTACH, "GEORGE II 069W HAZ MANIFEST.pdf");
 
 describe("combined IMDG cell", () => {
   it("parses Pasha UN/name/class/PG in one cell", () => {
@@ -229,7 +232,7 @@ describe("voyage quality merge", () => {
 
 describe("real 068W audited DCM", () => {
   it("reads 961 lines as GEORGE II 068W with no CDC", () => {
-    const buf = readFileSync("/workspace/attachments/Copy of G2068W LGB DCM - Audited.xlsx");
+    const buf = readFileSync(join(ATTACH, "Copy of G2068W LGB DCM - Audited.xlsx"));
     const parsed = parseXlsxArrayBuffer(buf, "Copy of G2068W LGB DCM - Audited.xlsx");
     assert.equal(parsed.lines.length, 961);
     assert.equal(parsed.voyage.vessel, "GEORGE II");
@@ -246,7 +249,7 @@ describe("real 068W audited DCM", () => {
 
 describe("signed scan PDF", () => {
   it("explains that a photo of the DCM cannot be read", async () => {
-    const buf = readFileSync("/workspace/attachments/G2 DCM.pdf");
+    const buf = readFileSync(join(ATTACH, "G2 DCM.pdf"));
     const parsed = await ingestBuffer(buf, "G2 DCM.pdf");
     assert.equal(parsed.lines.length, 0);
     assert.equal(parsed.warnings[0], SCAN_PDF_WARNING);

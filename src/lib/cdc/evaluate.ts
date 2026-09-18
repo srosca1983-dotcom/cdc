@@ -1,7 +1,7 @@
-import { hasFlag, lookupUn } from "./catalog.ts";
+import { detectPihFromPapers, hasFlag, lookupUn } from "./catalog.ts";
 import { evaluateLegacy } from "./legacy.ts";
 import { classifyPackaging } from "./packaging.ts";
-import { formatKg, ONE_METRIC_TON_KG, TWENTY_METRIC_TON_KG } from "./quantity.ts";
+import { formatKg, ONE_METRIC_TON_KG, ONE_THOUSAND_POUNDS_KG, TWENTY_METRIC_TON_KG } from "./quantity.ts";
 import type {
   CdcParagraph,
   EvalOptions,
@@ -64,20 +64,21 @@ interface Acc {
   pih: boolean;
 }
 
-function applyResidue(acc: Acc, options: EvalOptions, residueAlways: boolean, namedBulk: boolean) {
+function applyResidue(acc: Acc, options: EvalOptions, residueAlways: boolean, bulkLiquidOrGas: boolean) {
   if (!options.residueMode) return;
+  // Residue applies only to cargo that was actually in the ship's tanks — never
+  // to packaged/containerized lots just because the UN is a named bulk liquid.
+  if (!bulkLiquidOrGas) return;
   if (residueAlways) {
     acc.reasons.push(
-      "Residue of this liquefied gas is still CDC — 33 CFR 160.202 CDC residue definition excepts ammonia, chlorine, ethane, ethylene oxide, LNG, methyl bromide, sulfur dioxide, and vinyl chloride.",
+      "Residue of this liquefied gas is still CDC — 33 CFR 160.202 CDC residue excepts ammonia, chlorine, ethane, ethylene oxide, LNG, methyl bromide, sulfur dioxide, and vinyl chloride.",
     );
     return;
   }
-  if (namedBulk || acc.paras.includes("160.202(7)") || acc.paras.includes("160.202(8)") || acc.paras.includes("160.202(9)")) {
-    acc.verdict = "CDC_RESIDUE";
-    acc.reasons.push(
-      "Treated as CDC residue remaining after discharge (not accessible through normal transfer). Report as CDC residue on the eNOAD cargo section.",
-    );
-  }
+  acc.verdict = "CDC_RESIDUE";
+  acc.reasons.push(
+    "Treated as CDC residue remaining after discharge (not accessible through normal transfer). Report as CDC residue on the eNOAD cargo section.",
+  );
 }
 
 function evaluateLinePass1(line: LineInput, options: EvalOptions): Omit<LineResult, "disagrees" | "legacy" | "legacyReason"> {
@@ -89,12 +90,13 @@ function evaluateLinePass1(line: LineInput, options: EvalOptions): Omit<LineResu
   const displayClass = line.hazClass || catalogClass || "";
   const qty = line.quantityKg;
 
+  const papers = detectPihFromPapers(line);
   const acc: Acc = {
     verdict: "NOT_CDC",
     paras: [],
     reasons: [],
     needs: [],
-    pih: hasFlag(entry, "pih_gas") || hasFlag(entry, "pih_liquid"),
+    pih: hasFlag(entry, "pih_gas") || hasFlag(entry, "pih_liquid") || papers.pih,
   };
 
   const is11or12 = matches(tokens, DIV_11_12);
@@ -233,7 +235,7 @@ function evaluateLinePass1(line: LineInput, options: EvalOptions): Omit<LineResu
       );
     } else if (qty !== null && qty <= ONE_METRIC_TON_KG && acc.verdict !== "CDC") {
       acc.reasons.push(
-        `Division 2.3 quantity on this line is ${formatKg(qty)}, at or under the 1 metric ton per-vessel threshold. Not CDC under (3) unless other lines of the same UN push the total over 1 MT, or it is bulk liquefied gas under (7).`,
+        `Division 2.3 quantity on this line is ${formatKg(qty)}, at or under the 1 metric ton per-vessel threshold. Not CDC under (3) unless other 2.3 PIH on board pushes the vessel total over 1 MT, or it is bulk liquefied gas under (7).`,
       );
     } else if (qty === null && acc.verdict !== "CDC") {
       acc.verdict = "REVIEW";
@@ -251,7 +253,7 @@ function evaluateLinePass1(line: LineInput, options: EvalOptions): Omit<LineResu
   }
 
   // (5) Liquid 6.1 (primary or subsidiary) that is PIH, in bulk packaging OR > 20 MT packaged
-  const pihLiquid = hasFlag(entry, "pih_liquid");
+  const pihLiquid = hasFlag(entry, "pih_liquid") || (papers.pih && is61);
   const maybe61 = is61 || pihLiquid;
   if (maybe61) {
     addPara(acc.paras, "160.202(5)");
@@ -270,7 +272,7 @@ function evaluateLinePass1(line: LineInput, options: EvalOptions): Omit<LineResu
       );
     } else if (knownPih && qty !== null && qty <= TWENTY_METRIC_TON_KG && !bulkPkg) {
       acc.reasons.push(
-        `Known PIH liquid, packaged, ${formatKg(qty)} — under the 20 MT packaged threshold. Not CDC under (5) unless other lines of the same UN push the total over 20 MT.`,
+        `Known PIH liquid, packaged, ${formatKg(qty)} — under the 20 MT packaged threshold. Not CDC under (5) unless other PIH liquid on board pushes the vessel total over 20 MT.`,
       );
     } else if (knownPih && qty === null && !bulkPkg) {
       acc.verdict = upgrade(acc.verdict, "REVIEW");
@@ -333,7 +335,9 @@ function evaluateLinePass1(line: LineInput, options: EvalOptions): Omit<LineResu
     }
   }
 
-  applyResidue(acc, options, hasFlag(entry, "residue_always"), hasFlag(entry, "named_bulk_liquid") || hasFlag(entry, "an_51") || hasFlag(entry, "an_fertilizer"));
+  const bulkLiquidOrGas =
+    acc.paras.includes("160.202(7)") || acc.paras.includes("160.202(8)");
+  applyResidue(acc, options, hasFlag(entry, "residue_always"), bulkLiquidOrGas);
 
   if (acc.verdict === "NOT_CDC" && acc.reasons.length === 0) {
     acc.reasons.push("Does not meet any 33 CFR 160.202 Certain Dangerous Cargo category based on the class, UN, packaging, and quantity provided.");
@@ -356,20 +360,6 @@ function evaluateLinePass1(line: LineInput, options: EvalOptions): Omit<LineResu
   };
 }
 
-function aggregateByUn(lines: LineResult[], pred: (l: LineResult) => boolean): Map<string, number | null> {
-  const map = new Map<string, number | null>();
-  for (const l of lines) {
-    if (!pred(l)) continue;
-    const prev = map.has(l.un) ? map.get(l.un)! : 0;
-    if (l.quantityKg === null || prev === null) {
-      map.set(l.un, null);
-    } else {
-      map.set(l.un, prev + l.quantityKg);
-    }
-  }
-  return map;
-}
-
 function isPackaged61(l: LineResult): boolean {
   return (
     l.paragraphs.includes("160.202(5)") &&
@@ -378,75 +368,139 @@ function isPackaged61(l: LineResult): boolean {
   );
 }
 
-function pass2Quantities(lines: LineResult[]): string[] {
+function sumKnown(lines: LineResult[]): { known: number; missing: boolean } {
+  let known = 0;
+  let missing = false;
+  for (const l of lines) {
+    if (l.quantityKg === null) missing = true;
+    else known += l.quantityKg;
+  }
+  return { known, missing };
+}
+
+function pass2Quantities(lines: LineResult[], options: EvalOptions): string[] {
   const notes: string[] = [];
 
-  const div23 = aggregateByUn(
-    lines,
-    (l) => l.paragraphs.includes("160.202(3)") && l.verdict !== "CDC",
-  );
-  for (const [un, total] of div23) {
-    const related = lines.filter((l) => l.un === un && l.paragraphs.includes("160.202(3)"));
-    if (total !== null && total > ONE_METRIC_TON_KG) {
-      for (const l of related) {
-        if (l.verdict === "CDC") continue;
+  const div23 = lines.filter((l) => l.paragraphs.includes("160.202(3)"));
+  if (div23.length > 0) {
+    const { known, missing } = sumKnown(div23);
+    if (known > ONE_METRIC_TON_KG) {
+      for (const l of div23) {
+        if (l.verdict === "CDC" || l.verdict === "CDC_RESIDUE") continue;
         l.verdict = "CDC";
         l.reasons.push(
-          `Vessel total for UN ${un} Division 2.3 is ${formatKg(total)}, which exceeds 1 metric ton — CDC (33 CFR 160.202(3)).`,
+          `Vessel total of Division 2.3 PIH is ${formatKg(known)}, which exceeds 1 metric ton — CDC (33 CFR 160.202(3)). Totals combine every 2.3 PIH UN on board, not each UN separately.`,
         );
         l.needs = l.needs.filter((n) => !n.includes("1 MT"));
       }
-    } else if (total !== null && total <= ONE_METRIC_TON_KG) {
-      for (const l of related) {
+      notes.push(`Division 2.3 PIH vessel total ${formatKg(known)} > 1 MT — CDC under (3).`);
+    } else if (!missing) {
+      for (const l of div23) {
         if (l.verdict === "CDC" || l.verdict === "CDC_RESIDUE") continue;
         l.needs = l.needs.filter((n) => !n.includes("1 MT"));
         if (l.verdict === "REVIEW" && l.needs.length === 0 && !l.paragraphs.some((p) => p !== "160.202(3)")) {
           l.verdict = "NOT_CDC";
         }
       }
-      notes.push(`UN ${un} Division 2.3 vessel total ${formatKg(total)} ≤ 1 MT — not CDC under (3).`);
+      notes.push(`Division 2.3 PIH vessel total ${formatKg(known)} ≤ 1 MT — not CDC under (3).`);
     }
   }
 
-  const div61 = aggregateByUn(lines, (l) => isPackaged61(l) && l.verdict !== "CDC");
-  for (const [un, total] of div61) {
-    const related = lines.filter((l) => l.un === un && isPackaged61(l));
-    const anyPih = related.some((l) => l.pih);
-    if (total !== null && total > TWENTY_METRIC_TON_KG) {
-      for (const l of related) {
-        if (l.verdict === "CDC") continue;
-        if (anyPih) {
-          l.verdict = "CDC";
-          l.reasons.push(
-            `Vessel total for UN ${un} PIH liquid is ${formatKg(total)}, which exceeds 20 metric tons in non-bulk packaging — CDC (33 CFR 160.202(5)).`,
-          );
-        } else {
-          l.verdict = "REVIEW";
-          l.reasons.push(
-            `Vessel total for UN ${un} Division 6.1 is ${formatKg(total)}, over 20 MT packaged. If this material is PIH it is CDC (33 CFR 160.202(5)). Confirm Hazard Zone on the shipping paper.`,
-          );
-          if (!l.needs.some((n) => n.includes("PIH"))) {
-            l.needs.push("Confirm whether this 6.1 liquid is PIH (Hazard Zone A–D).");
-          }
+  const pkg61 = lines.filter(isPackaged61);
+  const knownPihPkg = pkg61.filter((l) => l.pih);
+  const unknownPihPkg = pkg61.filter((l) => !l.pih);
+
+  if (knownPihPkg.length > 0) {
+    const { known, missing } = sumKnown(knownPihPkg);
+    if (known > TWENTY_METRIC_TON_KG) {
+      for (const l of knownPihPkg) {
+        if (l.verdict === "CDC" || l.verdict === "CDC_RESIDUE") continue;
+        l.verdict = "CDC";
+        l.reasons.push(
+          `Vessel total of packaged PIH liquid is ${formatKg(known)}, which exceeds 20 metric tons — CDC (33 CFR 160.202(5)). Totals combine every PIH liquid UN on board, not each UN separately.`,
+        );
+        l.needs = l.needs.filter((n) => !n.includes("20 MT"));
+      }
+      notes.push(`Packaged PIH liquid vessel total ${formatKg(known)} > 20 MT — CDC under (5).`);
+    } else if (!missing) {
+      for (const l of knownPihPkg) {
+        if (l.verdict === "CDC" || l.verdict === "CDC_RESIDUE") continue;
+        l.needs = l.needs.filter((n) => !n.includes("20 MT"));
+        if (l.verdict === "REVIEW" && l.needs.every((n) => n.includes("PIH") || n.includes("20 MT"))) {
+          l.verdict = "NOT_CDC";
+          l.needs = [];
+          l.reasons.push(`Vessel total ${formatKg(known)} ≤ 20 MT packaged — not CDC under (5).`);
+        }
+      }
+      notes.push(
+        `Packaged PIH liquid vessel total ${formatKg(known)} ≤ 20 MT — not CDC under (5) unless in bulk packaging.`,
+      );
+    }
+  }
+
+  if (unknownPihPkg.length > 0) {
+    const { known, missing } = sumKnown(unknownPihPkg);
+    if (known > TWENTY_METRIC_TON_KG) {
+      for (const l of unknownPihPkg) {
+        if (l.verdict === "CDC" || l.verdict === "CDC_RESIDUE") continue;
+        l.verdict = "REVIEW";
+        l.reasons.push(
+          `Vessel total of packaged Division 6.1 is ${formatKg(known)}, over 20 MT. If this material is PIH it is CDC (33 CFR 160.202(5)). Confirm Hazard Zone on the shipping paper.`,
+        );
+        if (!l.needs.some((n) => n.includes("PIH"))) {
+          l.needs.push("Confirm whether this 6.1 liquid is PIH (Hazard Zone A–D).");
         }
         l.needs = l.needs.filter((n) => !n.includes("20 MT"));
       }
-    } else if (total !== null && total <= TWENTY_METRIC_TON_KG) {
-      for (const l of related) {
+    } else if (!missing) {
+      for (const l of unknownPihPkg) {
         if (l.verdict === "CDC" || l.verdict === "CDC_RESIDUE") continue;
         l.needs = l.needs.filter((n) => !n.includes("20 MT"));
         if (l.verdict === "REVIEW" && l.needs.every((n) => n.includes("PIH") || n.includes("20 MT"))) {
           l.verdict = "NOT_CDC";
           l.needs = [];
           l.reasons.push(
-            `Vessel total ${formatKg(total)} ≤ 20 MT packaged — not CDC under (5) even if PIH.`,
+            `Vessel total ${formatKg(known)} ≤ 20 MT packaged — not CDC under (5) even if PIH.`,
           );
         }
       }
-      if (anyPih) {
+    }
+  }
+
+  if (options.residueMode) {
+    const bulkAn = lines.filter((l) => l.paragraphs.includes("160.202(9)"));
+    if (bulkAn.length > 0) {
+      const { known, missing } = sumKnown(bulkAn);
+      if (!missing && known <= ONE_THOUSAND_POUNDS_KG) {
+        for (const l of bulkAn) {
+          l.verdict = "CDC_RESIDUE";
+          l.reasons.push(
+            `Bulk ammonium nitrate remaining after discharge is ${formatKg(known)} (≤ 1,000 lb). That meets the CDC residue quantity cap in 33 CFR 160.202. Confirm it is not piled in pockets over 2 cubic feet.`,
+          );
+          if (!l.needs.some((n) => n.includes("2 cubic"))) {
+            l.needs.push("Confirm AN residue is not piled in pockets over 2 cubic feet.");
+          }
+        }
         notes.push(
-          `UN ${un} packaged PIH liquid vessel total ${formatKg(total)} ≤ 20 MT — not CDC under (5) unless in bulk packaging.`,
+          `Bulk AN residue ${formatKg(known)} ≤ 1,000 lb — report as CDC residue if not piled over 2 cu ft.`,
         );
+      } else if (!missing && known > ONE_THOUSAND_POUNDS_KG) {
+        for (const l of bulkAn) {
+          l.reasons.push(
+            `Remaining bulk ammonium nitrate is ${formatKg(known)}, over the 1,000 lb CDC residue cap. Still CDC under 33 CFR 160.202(9), not CDC residue.`,
+          );
+        }
+        notes.push(`Bulk AN remaining ${formatKg(known)} > 1,000 lb — still CDC, not residue.`);
+      } else if (missing) {
+        for (const l of bulkAn) {
+          if (l.verdict === "CDC") l.verdict = "REVIEW";
+          l.reasons.push(
+            "Residue of bulk ammonium nitrate is CDC residue only at ≤ 1,000 lb total and not piled in pockets over 2 cubic feet. Quantity is missing.",
+          );
+          if (!l.needs.some((n) => n.includes("1,000"))) {
+            l.needs.push("Net quantity of remaining bulk AN — 1,000 lb residue cap.");
+          }
+        }
       }
     }
   }
@@ -500,7 +554,7 @@ export function evaluateManifest(lines: LineInput[], options: EvalOptions = DEFA
     };
   });
 
-  const notes = pass2Quantities(evaluated);
+  const notes = pass2Quantities(evaluated, options);
 
   for (const l of evaluated) {
     const mappedLegacy = l.legacy === "CLEAR" ? "NOT_CDC" : l.legacy === "CDC" ? "CDC" : "REVIEW";

@@ -28,6 +28,16 @@ describe("normalize + parse", () => {
     assert.equal(parsed.lines[0].quantityKg, 18000);
     assert.ok(parsed.lines[1].quantityKg && parsed.lines[1].quantityKg > 900);
   });
+
+  it("reads a Hazard Zone column from the shipping paper", () => {
+    const parsed = parseManifest(
+      "UN,Class,Pkg,Qty,Hazard Zone\n2810,6.1,PORTABLE TANK,5000 kg,B",
+    );
+    assert.equal(parsed.lines[0].hazardZone, "B");
+    const result = evaluateManifest(parsed.lines, DEFAULT_OPTIONS);
+    assert.equal(result.lines[0].verdict, "CDC");
+    assert.equal(result.lines[0].pih, true);
+  });
 });
 
 describe("33 CFR 160.202 engine vs v1.0 HTML rules", () => {
@@ -229,5 +239,135 @@ describe("33 CFR 160.202 engine vs v1.0 HTML rules", () => {
     assert.ok(result.cdc >= 4);
     assert.ok(result.enoad.every((e) => e.un && e.name));
     assert.ok(result.disagreements > 0);
+  });
+
+  it("does not treat packaged propylene oxide as CDC residue when residue mode is on", () => {
+    const line = evaluateSingle({
+      un: "1280",
+      hazClass: "3",
+      packaging: "DRUM",
+      quantityKg: 200,
+      residueMode: true,
+    });
+    assert.equal(line.verdict, "NOT_CDC");
+    assert.ok(!line.paragraphs.includes("160.202(8)"));
+  });
+
+  it("does not treat oleum drums as CDC residue when residue mode is on", () => {
+    const line = evaluateSingle({
+      un: "1831",
+      hazClass: "8",
+      packaging: "DRUM",
+      quantityKg: 200,
+      residueMode: true,
+    });
+    assert.equal(line.verdict, "NOT_CDC");
+  });
+
+  it("treats ship's-tank propylene oxide as CDC residue after discharge", () => {
+    const line = evaluateSingle({
+      un: "1280",
+      hazClass: "3",
+      packaging: "CARGO TANK",
+      quantityKg: 1_200_000,
+      carriageMode: "bulk_tanker",
+      residueMode: true,
+    });
+    assert.equal(line.verdict, "CDC_RESIDUE");
+    assert.ok(line.paragraphs.includes("160.202(8)"));
+  });
+
+  it("keeps excepted bulk liquefied gas as CDC, not residue", () => {
+    const line = evaluateSingle({
+      un: "1972",
+      hazClass: "2.1",
+      packaging: "BULK",
+      quantityKg: 5_000_000,
+      carriageMode: "bulk_tanker",
+      residueMode: true,
+    });
+    assert.equal(line.verdict, "CDC");
+    assert.ok(line.paragraphs.includes("160.202(7)"));
+  });
+
+  it("treats bulk AN leftover ≤ 1,000 lb as CDC residue", () => {
+    const line = evaluateSingle({
+      un: "1942",
+      hazClass: "5.1",
+      packaging: "BULK",
+      quantityKg: 400,
+      carriageMode: "bulk_tanker",
+      residueMode: true,
+    });
+    assert.equal(line.verdict, "CDC_RESIDUE");
+    assert.ok(line.paragraphs.includes("160.202(9)"));
+    assert.ok(line.needs.some((n) => /2 cubic/i.test(n)));
+  });
+
+  it("keeps bulk AN leftover over 1,000 lb as CDC, not residue", () => {
+    const line = evaluateSingle({
+      un: "1942",
+      hazClass: "5.1",
+      packaging: "BULK",
+      quantityKg: 2000,
+      carriageMode: "bulk_tanker",
+      residueMode: true,
+    });
+    assert.equal(line.verdict, "CDC");
+    assert.ok(line.reasons.some((r) => /1,000 lb/i.test(r)));
+  });
+
+  it("does not convert bagged AN to residue", () => {
+    const line = evaluateSingle({
+      un: "1942",
+      hazClass: "5.1",
+      packaging: "BAG",
+      quantityKg: 200,
+      residueMode: true,
+    });
+    assert.equal(line.verdict, "CDC");
+    assert.ok(line.paragraphs.includes("160.202(4)"));
+    assert.ok(!line.paragraphs.includes("160.202(9)"));
+  });
+
+  it("combines different 2.3 UNs across the 1 MT vessel threshold", () => {
+    const parsed = parseManifest(
+      "UN,Class,Pkg,Qty\n1005,2.3,CYL,600 kg\n1017,2.3,CYL,500 kg",
+    );
+    const result = evaluateManifest(parsed.lines, DEFAULT_OPTIONS);
+    assert.equal(result.lines[0].verdict, "CDC");
+    assert.equal(result.lines[1].verdict, "CDC");
+    assert.ok(result.notes.some((n) => /2\.3 PIH vessel total/i.test(n)));
+  });
+
+  it("combines different packaged PIH liquid UNs across the 20 MT vessel threshold", () => {
+    const parsed = parseManifest(
+      "UN,Class,Pkg,Qty\n1098,6.1,BOX,12000 kg\n1143,6.1,BOX,9000 kg",
+    );
+    const result = evaluateManifest(parsed.lines, DEFAULT_OPTIONS);
+    assert.equal(result.lines[0].verdict, "CDC");
+    assert.equal(result.lines[1].verdict, "CDC");
+  });
+
+  it("treats Hazard Zone on the shipping paper as known PIH", () => {
+    const tank = evaluateSingle({
+      un: "2810",
+      name: "TOXIC LIQUID, ORGANIC, N.O.S. (Hazard Zone B)",
+      hazClass: "6.1",
+      packaging: "PORTABLE TANK",
+      quantityKg: 5000,
+    });
+    assert.equal(tank.verdict, "CDC");
+    assert.equal(tank.pih, true);
+
+    const carton = evaluateSingle({
+      un: "2810",
+      name: "TOXIC LIQUID, ORGANIC, N.O.S. (PIH)",
+      hazClass: "6.1",
+      packaging: "1 CN",
+      quantityKg: 2.5,
+    });
+    assert.equal(carton.verdict, "NOT_CDC");
+    assert.equal(carton.pih, true);
   });
 });

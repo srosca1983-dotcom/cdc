@@ -1,6 +1,6 @@
 import type { LineResult } from "../cdc/types.ts";
 import { isLimitedQty } from "../cdc/limited.ts";
-import { athwartGap, sameBayColumn } from "../ship/george-ii.ts";
+import { athwartGap, occupiedBays, sameBayColumn } from "../ship/george-ii.ts";
 import { containerKey, parseStow, type StowPos } from "../ship/stow.ts";
 import { applyPlanStow, type StowIssue } from "../ship/segregation.ts";
 import type { BaplieBox, BapliePlan } from "./types.ts";
@@ -34,10 +34,15 @@ export function beside(a: StowPos, b: StowPos): boolean {
 
 function atMotorEnd(reefer: StowPos, other: StowPos, motors: "aft" | "fwd"): boolean {
   if (reefer.onDeck !== other.onDeck) return false;
+  if (!sameBayColumn(reefer, other)) return false;
   if (reefer.row !== other.row) return false;
   if (Math.abs(reefer.tier - other.tier) > 2) return false;
-  if (motors === "aft") return other.bay > reefer.bay && other.bay - reefer.bay <= 2;
-  return other.bay < reefer.bay && reefer.bay - other.bay <= 2;
+  const mine = occupiedBays(reefer);
+  // A 20' only occupies one bay — there is no next-bay compressor cell.
+  if (mine.length < 2) return false;
+  const theirs = occupiedBays(other);
+  const motorBay = motors === "aft" ? Math.max(...mine) : Math.min(...mine);
+  return theirs.includes(motorBay);
 }
 
 interface DgSpot {

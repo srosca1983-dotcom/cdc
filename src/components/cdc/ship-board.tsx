@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, Flame } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { sheetFor, type ErgSheet } from "@/lib/erg/guides.ts";
-import { HATCHES, SHIP_NOTES, VESSEL, deckRowsFor, holdRowsFor, deckTiersFor, holdTiersFor } from "@/lib/ship/george-ii.ts";
+import { HATCHES, SHIP_NOTES, VESSEL, deckRowsFor, holdRowsFor, deckTiersFor, holdTiersFor, occupiedBays } from "@/lib/ship/george-ii.ts";
 import {
   hatchBuckets,
   unstowed,
@@ -462,7 +462,10 @@ function HatchView({
   const holdRowList = holdRowsFor(bucket.spec);
 
   function cells(tier: number, row: number, bay: number) {
-    return drawn.filter((s) => s.stow?.tier === tier && s.stow?.row === row && s.stow?.bay === bay);
+    return drawn.filter((s) => {
+      if (!s.stow || s.stow.tier !== tier || s.stow.row !== row) return false;
+      return occupiedBays(s.stow, bucket.spec).includes(bay);
+    });
   }
 
   return (
@@ -502,7 +505,7 @@ function HatchView({
       {baplie ? (
         <p className="text-xs text-muted">
           Navy = live reefer. Muted navy = NOR. Green = Ltd Qty only. Ink = full DG. Red/amber = a real CSM or 176.83 hit. Grey =
-          other cargo. Empty cells are empty. A 40' sits only in the middle column.
+          Empty cells are empty. A 40' occupies the even bay and hatches out both 20' ends.
         </p>
       ) : null}
 
@@ -593,48 +596,52 @@ function slotLabel(s: ContainerSlot): string {
 function SlotButton({
   s,
   wide,
+  home,
   onSlot,
   screen,
 }: {
   s: ContainerSlot;
   wide: boolean;
+  home: boolean;
   onSlot: (key: string) => void;
   screen: VoyageScreen;
 }) {
   const worst = worstSeverity(issuesForKey(screen, slotLookupKey(s.key)));
   const lqOnly = s.lines.length > 0 && s.lines.every((d) => isLimitedQty(d.line));
   const fullDg = s.lines.some((d) => !isLimitedQty(d.line));
+  const span = !home && !!s.stow?.fortyFoot;
   return (
     <button
       type="button"
       onClick={() => onSlot(s.key)}
+      title={span ? `${s.container} 40' occupies this 20' end` : s.container}
       className={cn(
         "flex min-h-14 w-full flex-col items-center justify-center rounded-sm px-0.5 font-mono text-[9px] leading-tight",
         wide ? "min-w-[2.4rem]" : "min-w-[1.6rem]",
-        s.conflict || s.mismatch
-          ? "ring-1 ring-review"
-          : "",
-        worst === "block"
-          ? "bg-cdc-soft text-ink"
-          : worst === "seg"
-            ? "bg-review-soft text-ink"
-            : fullDg
-              ? "bg-navy/15 text-ink"
-              : lqOnly
-                ? "bg-ok-soft text-ink"
-                : s.operating
-                  ? "bg-navy text-primary-foreground"
-                  : s.reefer
-                    ? "bg-navy-2 text-primary-foreground"
-                    : s.box
-                      ? "bg-surface-2 text-ink"
-                      : "bg-ok-soft text-ink",
+        s.conflict || s.mismatch ? "ring-1 ring-review" : "",
+        span
+          ? "bg-[repeating-linear-gradient(-45deg,transparent,transparent_4px,rgba(15,23,42,0.14)_4px,rgba(15,23,42,0.14)_8px)] text-muted"
+          : worst === "block"
+            ? "bg-cdc-soft text-ink"
+            : worst === "seg"
+              ? "bg-review-soft text-ink"
+              : fullDg
+                ? "bg-navy/15 text-ink"
+                : lqOnly
+                  ? "bg-ok-soft text-ink"
+                  : s.operating
+                    ? "bg-navy text-primary-foreground"
+                    : s.reefer
+                      ? "bg-navy-2 text-primary-foreground"
+                      : s.box
+                        ? "bg-surface-2 text-ink"
+                        : "bg-ok-soft text-ink",
       )}
     >
       <span className="max-w-full truncate">{s.container.replace(/[A-Z]{4}/, (p) => p.slice(0, 4))}</span>
-      <span className={s.operating || s.reefer ? "text-primary-foreground/80" : "text-muted"}>
-        {slotLabel(s)}
-        {s.stow?.fortyFoot ? " 40'" : ""}
+      <span className={span ? "text-subtle" : s.operating || s.reefer ? "text-primary-foreground/80" : "text-muted"}>
+        {span ? "40'" : slotLabel(s)}
+        {!span && s.stow?.fortyFoot ? " 40'" : ""}
         {worst || s.conflict ? " !" : ""}
       </span>
     </button>
@@ -700,7 +707,14 @@ function BayGrid({
                       return (
                         <div key={bay} className="flex flex-col gap-px">
                           {stack.map((s) => (
-                            <SlotButton key={s.key} s={s} wide={wide} onSlot={onSlot} screen={screen} />
+                            <SlotButton
+                              key={s.key}
+                              s={s}
+                              wide={wide}
+                              home={s.stow?.bay === bay}
+                              onSlot={onSlot}
+                              screen={screen}
+                            />
                           ))}
                         </div>
                       );

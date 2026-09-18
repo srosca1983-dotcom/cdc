@@ -1,12 +1,19 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { hasExplicitLqMarks, isLimitedQty } from "./limited.ts";
 import { parseXlsxArrayBuffer } from "./xlsx.ts";
 import { evaluateManifest } from "./evaluate.ts";
 import { CONTAINER_OPTIONS, type LineInput } from "./types.ts";
 import { ingestBuffer } from "./ingest.ts";
 import { screenVoyage } from "../ship/segregation.ts";
+
+const ATTACH = join(dirname(fileURLToPath(import.meta.url)), "../../../attachments");
+const FILE_069 = join(ATTACH, "DCM G2069W.xlsx");
+const FILE_068 = join(ATTACH, "Copy of G2068W LGB DCM - Audited.xlsx");
+const FILE_PDF = join(ATTACH, "GEORGE II 069W HAZ MANIFEST.pdf");
 
 function line(partial: Partial<LineInput> & Pick<LineInput, "un" | "hazClass">): LineInput {
   return {
@@ -75,8 +82,8 @@ describe("limited quantity", () => {
 });
 
 describe("G2069W / G2068W vs CargoMax", () => {
-  it("does not raise CSM location blocks on 069W Excel after LQ", () => {
-    const parsed = parseXlsxArrayBuffer(readFileSync("/workspace/attachments/DCM G2069W.xlsx"), "DCM G2069W.xlsx");
+  it("does not raise CSM location blocks on 069W Excel after LQ", { skip: !existsSync(FILE_069) }, () => {
+    const parsed = parseXlsxArrayBuffer(readFileSync(FILE_069), "DCM G2069W.xlsx");
     assert.equal(hasExplicitLqMarks(parsed.lines), true);
     const result = evaluateManifest(parsed.lines, CONTAINER_OPTIONS);
     const lq = result.lines.filter((l) => isLimitedQty(l)).length;
@@ -91,11 +98,8 @@ describe("G2069W / G2068W vs CargoMax", () => {
     );
   });
 
-  it("blocks unmarked class 2 on Hatch 8 on 068W Excel (not auto-LQ)", () => {
-    const parsed = parseXlsxArrayBuffer(
-      readFileSync("/workspace/attachments/Copy of G2068W LGB DCM - Audited.xlsx"),
-      "068W.xlsx",
-    );
+  it("blocks unmarked class 2 on Hatch 8 on 068W Excel (not auto-LQ)", { skip: !existsSync(FILE_068) }, () => {
+    const parsed = parseXlsxArrayBuffer(readFileSync(FILE_068), "068W.xlsx");
     const result = evaluateManifest(parsed.lines, CONTAINER_OPTIONS);
     const screen = screenVoyage(result.lines);
     const hatch8 = screen.issues.filter((i) => i.severity === "block" && /Hatch 8/i.test(i.title));
@@ -108,11 +112,8 @@ describe("G2069W / G2068W vs CargoMax", () => {
 });
 
 describe("printed HAZ PDF", () => {
-  it("reads stow and does not treat a whole PDF without Ltd Qty as LQ", async () => {
-    const parsed = await ingestBuffer(
-      readFileSync("/workspace/attachments/GEORGE II 069W HAZ MANIFEST.pdf"),
-      "GEORGE II 069W HAZ MANIFEST.pdf",
-    );
+  it("reads stow and does not treat a whole PDF without Ltd Qty as LQ", { skip: !existsSync(FILE_PDF) }, async () => {
+    const parsed = await ingestBuffer(readFileSync(FILE_PDF), "GEORGE II 069W HAZ MANIFEST.pdf");
     assert.equal(hasExplicitLqMarks(parsed.lines), false);
     assert.ok(parsed.lines.filter((l) => l.stowLoc).length > 800);
     const result = evaluateManifest(parsed.lines, CONTAINER_OPTIONS);

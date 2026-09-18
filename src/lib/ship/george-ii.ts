@@ -257,10 +257,14 @@ export function isRealRow(spec: HatchSpec, onDeck: boolean, row: number): boolea
   return ids.includes(row);
 }
 
-/** Deck tiers start at 80. Extra 90/92 only when the voyage actually has them. */
+/** Deck tiers start at 82 (1st on deck). 90/92 only when a box is actually there. */
 export function deckTiersFor(spec: HatchSpec, occupied: number[] = []): number[] {
   const tiers: number[] = [];
-  for (let i = 0; i < spec.onDeckTiers; i++) tiers.push(80 + 2 * i);
+  for (let i = 0; i < spec.onDeckTiers; i++) {
+    const t = 82 + 2 * i;
+    if (t >= 90) continue;
+    tiers.push(t);
+  }
   for (const t of occupied) {
     if ((t === 90 || t === 92) && !tiers.includes(t)) tiers.push(t);
   }

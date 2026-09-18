@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { hatchFromBay, parseStow, formatStow, stowFromRowText } from "./stow.ts";
-import { HATCHES, imdgAllowed, VESSEL, DECK_ROWS_H1, HOLD_ROWS_7, rowsPortToStbd } from "./george-ii.ts";
+import { HATCHES, imdgAllowed, VESSEL, DECK_ROWS_H1, HOLD_ROWS_7, rowsPortToStbd, deckTiersFor, hatchSpec } from "./george-ii.ts";
 import { sheetFor } from "../erg/guides.ts";
 
 describe("GEORGE II stowage", () => {
@@ -15,6 +15,10 @@ describe("GEORGE II stowage", () => {
     assert.equal(hatchFromBay(18), 5);
     assert.equal(hatchFromBay(38), 10);
     assert.equal(hatchFromBay(46), 12);
+    assert.equal(hatchFromBay(4), 0);
+    assert.equal(hatchFromBay(8), 0);
+    assert.equal(parseStow("0040184"), null);
+    assert.equal(parseStow("4-08-84"), null);
   });
 
   it("reads 14-08-84 and 14-00-06 the way the conversion sheet writes them", () => {
@@ -32,6 +36,10 @@ describe("GEORGE II stowage", () => {
     assert.equal(hold?.tier, 6);
     assert.equal(hold?.onDeck, false);
     assert.match(formatStow(hold!), /3rd tier below/);
+    const first = parseStow("14-08-82");
+    assert.match(formatStow(first!), /1st tier on deck/);
+    assert.deepEqual(deckTiersFor(hatchSpec(10)!), [82, 84, 86]);
+    assert.deepEqual(deckTiersFor(hatchSpec(5)!), [82, 84, 86, 88]);
   });
 
   it("reads 7-digit Pasha stow and 6-digit printed DCM stow", () => {

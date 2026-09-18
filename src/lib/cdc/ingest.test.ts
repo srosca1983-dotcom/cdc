@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -116,7 +116,7 @@ describe("category scan", () => {
   });
 });
 
-describe("real Pasha DCM workbook", () => {
+describe("real Pasha DCM workbook", { skip: !existsSync(XLSX_PATH) }, () => {
   it("reads 928 cargo rows and voyage header, with no confirmed CDC", () => {
     const buf = readFileSync(XLSX_PATH);
     const parsed = parseXlsxArrayBuffer(buf, "DCM G2069W.xlsx");
@@ -185,7 +185,7 @@ describe("PDF token layout (EXP023AR)", () => {
   });
 });
 
-describe("real haz-manifest PDF", () => {
+describe("real haz-manifest PDF", { skip: !existsSync(PDF_PATH) }, () => {
   it("reads UN tokens and agrees CDC CARRIED: NO", async () => {
     const buf = readFileSync(PDF_PATH);
     const parsed = await ingestBuffer(buf, "GEORGE II 069W HAZ MANIFEST.pdf");
@@ -238,7 +238,7 @@ describe("voyage quality merge", () => {
   });
 });
 
-describe("real 068W audited DCM", () => {
+describe("real 068W audited DCM", { skip: !existsSync(join(ATTACH, "Copy of G2068W LGB DCM - Audited.xlsx")) }, () => {
   it("reads 961 lines as GEORGE II 068W with no CDC", () => {
     const buf = readFileSync(join(ATTACH, "Copy of G2068W LGB DCM - Audited.xlsx"));
     const parsed = parseXlsxArrayBuffer(buf, "Copy of G2068W LGB DCM - Audited.xlsx");
@@ -255,7 +255,7 @@ describe("real 068W audited DCM", () => {
   });
 });
 
-describe("signed scan PDF", () => {
+describe("signed scan PDF", { skip: !existsSync(join(ATTACH, "G2 DCM.pdf")) }, () => {
   it("explains that a photo of the DCM cannot be read", async () => {
     const buf = readFileSync(join(ATTACH, "G2 DCM.pdf"));
     const parsed = await ingestBuffer(buf, "G2 DCM.pdf");
@@ -327,7 +327,7 @@ describe("EXP023AR Word / text dump", () => {
     assert.equal(parsed.voyage.voyage, "070W");
   });
 
-  it("reads the real 070W Word FINAL DCM", async () => {
+  it("reads the real 070W Word FINAL DCM", { skip: !existsSync(join(ATTACH, "GEORGE II 070W FINAL DCM.doc")) }, async () => {
     const buf = readFileSync(join(ATTACH, "GEORGE II 070W FINAL DCM.doc"));
     const parsed = await ingestBuffer(buf, "GEORGE II 070W FINAL DCM.doc");
     assert.ok(parsed.lines.length >= 1000, `expected ~1112 lines, got ${parsed.lines.length}`);
@@ -374,7 +374,7 @@ UN/NA NO Proper Shipping Name HAZ Class Weight (Pounds) Packaging
     assert.equal(li?.hazClass, "9");
   });
 
-  it("extracts the G2069E fax image from the PDF", () => {
+  it("extracts the G2069E fax image from the PDF", { skip: !existsSync(join(ATTACH, "20260908091617376.pdf")) }, () => {
     const buf = readFileSync(join(ATTACH, "20260908091617376.pdf"));
     const rasters = extractPdfRasters(buf);
     assert.equal(rasters.length, 1);
@@ -383,7 +383,7 @@ UN/NA NO Proper Shipping Name HAZ Class Weight (Pounds) Packaging
     assert.equal(rasters[0].height, 1700);
   });
 
-  it("reads the real G2069E fax scan", { timeout: 120000 }, async () => {
+  it("reads the real G2069E fax scan", { timeout: 120000, skip: !existsSync(join(ATTACH, "20260908091617376.pdf")) }, async () => {
     const buf = readFileSync(join(ATTACH, "20260908091617376.pdf"));
     const parsed = await ingestBuffer(buf, "20260908091617376.pdf");
     assert.ok(parsed.lines.length >= 8, `expected ~11 lines, got ${parsed.lines.length}`);

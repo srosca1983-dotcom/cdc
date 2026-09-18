@@ -30,28 +30,88 @@ import { downloadText, resultsCsv } from "@/lib/cdc/export.ts";
 import { ingestFile } from "@/lib/cdc/ingest.ts";
 import { lookupUn } from "@/lib/cdc/catalog.ts";
 import { parseManifest } from "@/lib/cdc/parse.ts";
-import { compareManifests, kindLabel, selectPreferred, type ManifestCompare } from "@/lib/cdc/compare.ts";
+import { compareManifests, kindLabel, mergeStowFromAll, selectPreferred, type ManifestCompare } from "@/lib/cdc/compare.ts";
 import { packFormLabel } from "@/lib/cdc/packaging.ts";
 import { formatKg } from "@/lib/cdc/quantity.ts";
 import { DISCLAIMER, ENOAD_BLURB, RULE_CARDS } from "@/lib/cdc/rules-text.ts";
 import { PASHA_SAMPLE, WORKED_SAMPLE } from "@/lib/cdc/sample.ts";
 import { categoryScan, type ScanItem } from "@/lib/cdc/scan.ts";
-import { loadVoyageLog, logLabel, pushVoyageLog, voyageBits, type VoyageLog } from "@/lib/cdc/history.ts";
+import { loadCargo, loadVoyageLog, logLabel, pushVoyageLog, saveCargo, voyageBits, type VoyageLog } from "@/lib/cdc/history.ts";
 import { CONTAINER_OPTIONS } from "@/lib/cdc/types.ts";
 import type { EvalResult, LineResult, ParseResult, VoyageInfo } from "@/lib/cdc/types.ts";
 import { cn } from "@/lib/utils";
+import { ShipBoard, ResponseIndex, ChemicalView } from "@/components/cdc/ship-board.tsx";
+import { sheetFor } from "@/lib/erg/guides.ts";
+import { isBaplieFilename, looksLikeBaplie, parseBaplie } from "@/lib/baplie/parse.ts";
+import { SAMPLE_BAPLIE } from "@/lib/baplie/sample.ts";
+import { loadBaplie, saveBaplie } from "@/lib/baplie/store.ts";
+import type { BapliePlan } from "@/lib/baplie/types.ts";
 
-type Tab = "manifest" | "lookup" | "rules";
+type Tab = "manifest" | "ship" | "response" | "lookup" | "rules";
 type Filter = "flagged" | "all" | "CDC" | "REVIEW" | "NOT_CDC";
 
 export function Screener() {
   const [tab, setTab] = useState<Tab>("manifest");
+  const [parsed, setParsed] = useState<ParseResult | null>(null);
+  const [result, setResult] = useState<EvalResult | null>(null);
+  const [baplie, setBaplie] = useState<BapliePlan | null>(null);
+  const [chem, setChem] = useState<{ un: string; cls: string; name: string } | null>(null);
+
+  useEffect(() => {
+    const stored = loadCargo();
+    if (stored) {
+      const restored: ParseResult = {
+        header: [],
+        lines: stored.lines,
+        warnings: [],
+        delimiter: "xlsx",
+        voyage: stored.voyage,
+        unitGuess: "lb",
+        sourceName: stored.sourceName,
+      };
+      setParsed(restored);
+      setResult(evaluateManifest(stored.lines, CONTAINER_OPTIONS));
+    }
+    setBaplie(loadBaplie());
+  }, []);
 
   return (
     <div className="min-h-dvh bg-bg">
-      <Header tab={tab} onTab={setTab} />
+      <Header tab={tab} onTab={setTab} hasVoyage={Boolean(result || baplie)} />
       <main className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">
-        {tab === "manifest" && <ManifestPanel />}
+        {tab === "manifest" && (
+          <ManifestPanel
+            parsed={parsed}
+            result={result}
+            baplie={baplie}
+            setParsed={setParsed}
+            setResult={setResult}
+            setBaplie={setBaplie}
+          />
+        )}
+        {tab === "ship" && (result || baplie) && (
+          <ShipBoard parsed={parsed} result={result} baplie={baplie} />
+        )}
+        {tab === "ship" && !result && !baplie && <NeedVoyage onGo={() => setTab("manifest")} />}
+        {tab === "response" && result && !chem && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xl font-medium">Spill and fire sheets</h2>
+              <p className="mt-1 text-sm text-muted">
+                Every UN on this voyage. Press a line for how it looks, how it burns, and
+                what to do on GEORGE II.
+              </p>
+            </div>
+            <ResponseIndex lines={result.lines} onOpen={setChem} />
+          </div>
+        )}
+        {tab === "response" && chem && (
+          <ChemicalView
+            sheet={sheetFor(chem.un, chem.cls, chem.name)}
+            onBack={() => setChem(null)}
+          />
+        )}
+        {tab === "response" && !result && <NeedVoyage onGo={() => setTab("manifest")} />}
         {tab === "lookup" && <LookupPanel />}
         {tab === "rules" && <RulesPanel />}
       </main>
@@ -59,7 +119,7 @@ export function Screener() {
   );
 }
 
-function Header({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
+function Header({ tab, onTab, hasVoyage }: { tab: Tab; onTab: (t: Tab) => void; hasVoyage: boolean }) {
   return (
     <header className="bg-navy text-primary-foreground">
       <div className="mx-auto flex max-w-[1400px] flex-col gap-5 px-4 py-5 sm:px-6 sm:py-6">
@@ -76,10 +136,10 @@ function Header({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
                 Certain Dangerous Cargo for the Master
               </h1>
               <p className="mt-1 max-w-2xl text-sm text-primary-foreground/70">
-                Drop the Excel DCM, the Word FINAL DCM, or the printed EXP023AR PDF. The
-                engine screens every line, shows why CDC is YES or NO against the
-                nine 160.202 families, and writes the eNOAD cargo block for an
-                email to the Master.
+                Drop the Excel DCM, the Word FINAL DCM, and the printed manifest.
+                CDC is screened from that voyage. BAPLIE is optional — drop it when you
+                want reefers and the rest of the bay plan.
+
               </p>
             </div>
           </div>
@@ -87,10 +147,12 @@ function Header({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
             Container ships only
           </Badge>
         </div>
-        <nav className="flex gap-1 rounded-lg bg-navy-2 p-1" aria-label="Primary">
+        <nav className="flex flex-wrap gap-1 rounded-lg bg-navy-2 p-1" aria-label="Primary">
           {(
             [
               ["manifest", "Manifest"],
+              ["ship", "Ship"],
+              ["response", "Spill / fire"],
               ["lookup", "UN lookup"],
               ["rules", "33 CFR 160.202"],
             ] as const
@@ -106,7 +168,7 @@ function Header({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
                   : "text-primary-foreground/70 hover:text-primary-foreground",
               )}
             >
-              {label}
+              {id === "ship" && hasVoyage ? `${label} ·` : label}
             </button>
           ))}
         </nav>
@@ -115,9 +177,37 @@ function Header({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
   );
 }
 
-function ManifestPanel() {
-  const [parsed, setParsed] = useState<ParseResult | null>(null);
-  const [result, setResult] = useState<EvalResult | null>(null);
+function NeedVoyage({ onGo }: { onGo: () => void }) {
+  return (
+    <div className="rounded-lg border bg-surface p-6 shadow-border">
+      <h2 className="text-lg font-medium">Load a voyage first</h2>
+      <p className="mt-2 text-sm text-muted">
+        Drop the Excel DCM (and the Word or PDF if you have them) on Manifest. Stow
+        positions live on the Excel sheet. A BAPLIE is optional — the hatch plan still
+        works from the DCM.
+      </p>
+      <Button className="mt-4" onClick={onGo}>
+        Open Manifest
+      </Button>
+    </div>
+  );
+}
+
+function ManifestPanel({
+  parsed,
+  result,
+  baplie,
+  setParsed,
+  setResult,
+  setBaplie,
+}: {
+  parsed: ParseResult | null;
+  result: EvalResult | null;
+  baplie: BapliePlan | null;
+  setParsed: (p: ParseResult | null) => void;
+  setResult: (r: EvalResult | null) => void;
+  setBaplie: (p: BapliePlan | null) => void;
+}) {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("flagged");
   const [query, setQuery] = useState("");
@@ -131,6 +221,7 @@ function ManifestPanel() {
   const [restored, setRestored] = useState<VoyageLog | null>(null);
   const [compare, setCompare] = useState<ManifestCompare | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const baplieRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -152,6 +243,12 @@ function ManifestPanel() {
     setQuery("");
     setRestored(null);
     setCompare(null);
+    saveCargo({
+      at: Date.now(),
+      voyage: next.voyage,
+      sourceName: next.sourceName,
+      lines: next.lines,
+    });
     const mail = masterEmail(evaluated, next.voyage, next.sourceName);
     setLog(
       pushVoyageLog({
@@ -169,23 +266,58 @@ function ManifestPanel() {
     );
   }
 
+  async function applyBaplieFile(file: File) {
+    const text = await file.text();
+    if (!looksLikeBaplie(text) && !isBaplieFilename(file.name)) {
+      throw new Error("That file does not look like a BAPLIE (UNH+BAPLIE).");
+    }
+    const plan = parseBaplie(text, file.name);
+    setBaplie(plan);
+    saveBaplie(plan);
+  }
+
   async function onFiles(files: FileList | File[]) {
-    const list = [...files].filter((f) =>
-      /\.(xlsx|xls|xlsm|pdf|csv|tsv|txt|doc|docx)$/i.test(f.name),
-    );
-    if (list.length === 0) return;
+    const list = [...files];
+    const baplieFiles: File[] = [];
+    const dcmFiles: File[] = [];
+    for (const f of list) {
+      if (isBaplieFilename(f.name)) {
+        baplieFiles.push(f);
+        continue;
+      }
+      if (/\.txt$/i.test(f.name)) {
+        const head = (await f.text()).slice(0, 4000);
+        if (looksLikeBaplie(head)) {
+          baplieFiles.push(f);
+          continue;
+        }
+      }
+      if (/\.(xlsx|xls|xlsm|pdf|csv|tsv|txt|doc|docx|edi|baplie|bec)$/i.test(f.name)) {
+        if (/\.(edi|baplie|bec)$/i.test(f.name)) baplieFiles.push(f);
+        else dcmFiles.push(f);
+      }
+    }
     setProgress(null);
     setError(null);
     setCompare(null);
     try {
+      if (baplieFiles[0]) {
+        setBusy("Reading BAPLIE…");
+        await applyBaplieFile(baplieFiles[0]);
+      }
+      if (dcmFiles.length === 0) {
+        if (baplieFiles[0]) return;
+        return;
+      }
       const parsedList = [];
-      for (let i = 0; i < Math.min(list.length, 2); i++) {
-        const file = list[i];
+      const take = Math.min(dcmFiles.length, 3);
+      for (let i = 0; i < take; i++) {
+        const file = dcmFiles[i];
         const isPdf = file.name.toLowerCase().endsWith(".pdf");
         const isDoc = /\.docx?$/i.test(file.name);
         setBusy(
-          list.length > 1
-            ? `Reading file ${i + 1} of ${Math.min(list.length, 2)}…`
+          dcmFiles.length > 1
+            ? `Reading file ${i + 1} of ${take}…`
             : isPdf
               ? "Reading PDF…"
               : isDoc
@@ -194,7 +326,7 @@ function ManifestPanel() {
         );
         const next = await ingestFile(file, (done, total) => {
           setBusy(
-            list.length > 1
+            dcmFiles.length > 1
               ? `File ${i + 1}: page ${done} of ${total}`
               : total > 0 && done === 0
                 ? "Reading scanned DCM…"
@@ -205,7 +337,7 @@ function ManifestPanel() {
         parsedList.push(next);
       }
       const usable = parsedList.filter((p) => p.lines.length > 0);
-      const preferred = selectPreferred(usable);
+      const preferred = mergeStowFromAll(usable) ?? selectPreferred(usable);
       if (!preferred) {
         setParsed(parsedList[0] ?? null);
         setResult(null);
@@ -275,9 +407,9 @@ function ManifestPanel() {
           <div>
             <h2 className="text-base font-medium">Dangerous cargo manifest</h2>
             <p className="mt-1 text-sm text-muted">
-                Drop the Excel DCM (.xlsx), the Word FINAL DCM (.doc), or the printed
-                EXP023AR PDF. A signed fax/scan of the table is slower (OCR) and
-                less exact — prefer Excel when you have it.
+              Drop up to three files for this voyage: Excel DCM, Word FINAL DCM, printed
+              EXP023AR PDF. Excel carries Stow Loc for the hatch plan. A BAPLIE is
+              optional and loads separately — you do not need it for CDC.
             </p>
           </div>
 
@@ -299,7 +431,7 @@ function ManifestPanel() {
                 ref={fileRef}
                 type="file"
                 multiple
-                accept=".xlsx,.xls,.xlsm,.pdf,.doc,.docx,.csv,.tsv,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                accept=".xlsx,.xls,.xlsm,.pdf,.doc,.docx,.csv,.tsv,.txt,.edi,.baplie,.bec,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 disabled={Boolean(busy)}
                 aria-label="Upload dangerous cargo manifest"
                 className="absolute inset-0 z-10 cursor-pointer opacity-0"
@@ -313,10 +445,10 @@ function ManifestPanel() {
               <Upload className="size-5" />
             </span>
             <span className="pointer-events-none text-sm font-medium">
-              Drop Excel, Word FINAL DCM, printed PDF, or both
+              Drop Excel, Word FINAL DCM, and the printed PDF
             </span>
             <span className="pointer-events-none text-xs text-muted">
-              Signed photo / fax of the table uses OCR · Excel is still the cleanest
+              Up to three files · Excel has hatch stowage · CDC from the preferred sheet
             </span>
             {busy ? (
               <span className="pointer-events-none mt-2 w-full max-w-xs">
@@ -360,7 +492,7 @@ function ManifestPanel() {
               }}
             >
               <Eraser />
-              Clear
+              Clear DCM
             </Button>
           </div>
 
@@ -389,6 +521,77 @@ function ManifestPanel() {
 
           {error ? (
             <p className="rounded-md bg-cdc-soft px-3 py-2 text-sm text-cdc">{error}</p>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)] sm:p-5">
+        <div className="flex flex-col gap-3">
+          <div>
+            <h2 className="text-base font-medium">BAPLIE (optional)</h2>
+            <p className="mt-1 text-sm text-muted">
+              Drop the bay plan when you have it. Reefers, dry cargo, and DG-next-to-reefer
+              show on Ship. All reefers face aft except bay 6 or 22 below (motors forward).
+              CDC and the hatch plan still run from the DCM alone.
+            </p>
+          </div>
+          <div className="relative flex min-h-24 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border bg-surface-2/60 px-4 py-6 text-center">
+            {mounted ? (
+              <input
+                ref={baplieRef}
+                type="file"
+                accept=".edi,.baplie,.bec,.txt,text/plain"
+                disabled={Boolean(busy)}
+                aria-label="Upload BAPLIE"
+                className="absolute inset-0 z-10 cursor-pointer opacity-0"
+                onChange={(e) => {
+                  if (e.target.files?.length) void onFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            ) : null}
+            <span className="pointer-events-none text-sm font-medium">Drop BAPLIE · .edi / .txt</span>
+            <span className="pointer-events-none text-xs text-muted">
+              Compiles onto the DCM after both are loaded. Does not replace the manifest.
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const plan = parseBaplie(SAMPLE_BAPLIE, "sample-george-ii.edi");
+                setBaplie(plan);
+                saveBaplie(plan);
+              }}
+            >
+              Example BAPLIE
+            </Button>
+            {baplie ? (
+              <>
+                <Badge variant="navy">
+                  {baplie.boxes.length} boxes · {baplie.boxes.filter((b) => b.reefer).length} RF
+                </Badge>
+                <span className="text-xs text-muted">
+                  {[baplie.vessel, baplie.voyage, baplie.sourceName].filter(Boolean).join(" · ")}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto"
+                  onClick={() => {
+                    setBaplie(null);
+                    saveBaplie(null);
+                  }}
+                >
+                  <Eraser />
+                  Clear BAPLIE
+                </Button>
+              </>
+            ) : null}
+          </div>
+          {baplie?.warnings.length ? (
+            <p className="text-xs text-review">{baplie.warnings.join(" ")}</p>
           ) : null}
         </div>
       </section>
@@ -795,10 +998,8 @@ function EmptyHint({
         <Shield className="mx-auto size-6 text-accent" strokeWidth={1.5} />
         <h2 className="mt-3 text-base font-medium">No manifest screened yet</h2>
         <p className="mx-auto mt-2 max-w-md text-sm text-muted">
-          Drop this voyage’s Excel DCM, the printed haz manifest, or both. A signed
-          photo of the DCM has no text to read. You will get a Master-ready eNOAD CDC
-          block — usually “CDC CARRIED: NO” — plus a nine-family check the Master can
-          trust.
+          Drop this voyage’s Excel DCM, Word FINAL DCM, and printed PDF (any mix).
+          Excel has the hatch stowage. You still get the Master-ready eNOAD CDC block.
         </p>
       </div>
       {log.length > 0 ? (
@@ -808,7 +1009,8 @@ function EmptyHint({
             <h2 className="text-sm font-medium">Recent voyages</h2>
           </div>
           <p className="mt-1 text-xs text-muted">
-            Email only — cargo lines are not stored. Drop the DCM again to re-screen.
+            Email is kept here. The last voyage’s cargo lines stay on this computer
+            for the hatch plan.
           </p>
           <ul className="mt-3 flex flex-col gap-2">
             {log.map((e) => (

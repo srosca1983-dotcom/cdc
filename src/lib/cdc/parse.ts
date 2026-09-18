@@ -61,6 +61,7 @@ const BOOKING_ALIASES = [/^booking$/, /^bkg$/];
 const TECH_ALIASES = [/technical\s*name/, /tech\s*name/];
 const LTD_ALIASES = [/limited\s*q/, /ltd\s*qty/, /^lq$/, /limit(ed)?\s*quant/];
 const ZONE_ALIASES = [/hazard\s*zone/, /^zone$/, /pih\s*zone/, /inhalation\s*zone/];
+const STOW_ALIASES = [/^stow/, /stow(age)?\s*loc/, /stow\s*pos/, /^bay$/, /cell\s*pos/];
 
 function scoreAliases(cell: string, aliases: RegExp[]): number {
   const c = cell.toLowerCase().replace(/[_./]+/g, " ").trim();
@@ -159,6 +160,7 @@ interface ColMap {
   techCol: number;
   ltdCol: number;
   zoneCol: number;
+  stowCol: number;
 }
 
 function at(row: string[], i: number): string {
@@ -215,6 +217,7 @@ function buildLine(row: string[], rowIndex: number, cols: ColMap, unitGuess: Qty
     technicalName: at(row, cols.techCol) || undefined,
     limitedQty: limitedQty || undefined,
     hazardZone: extractHazardZone(at(row, cols.zoneCol), combined?.name || nameFromCol, at(row, cols.techCol)) || undefined,
+    stowLoc: at(row, cols.stowCol) || undefined,
   };
 }
 
@@ -254,6 +257,7 @@ export function parseRowMatrix(rawRows: string[][], defaultQtyUnit: QtyUnit = DE
   const techCol = headerIdx >= 0 ? bestCol(header, TECH_ALIASES) : -1;
   const ltdCol = headerIdx >= 0 ? bestCol(header, LTD_ALIASES) : -1;
   const zoneCol = headerIdx >= 0 ? bestCol(header, ZONE_ALIASES) : -1;
+  const stowCol = headerIdx >= 0 ? bestCol(header, STOW_ALIASES) : -1;
 
   let unitGuess = defaultQtyUnit;
   const qtyHeader = (header[qtyCol] || "").toLowerCase();
@@ -287,6 +291,7 @@ export function parseRowMatrix(rawRows: string[][], defaultQtyUnit: QtyUnit = DE
     techCol,
     ltdCol,
     zoneCol,
+    stowCol,
   };
   const start = headerIdx >= 0 ? headerIdx + 1 : 0;
   const lines: LineInput[] = [];

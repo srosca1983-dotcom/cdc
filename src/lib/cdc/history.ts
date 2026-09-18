@@ -1,4 +1,4 @@
-import type { VoyageInfo } from "./types.ts";
+import type { LineInput, VoyageInfo } from "./types.ts";
 
 const KEY = "cdc-enoad-log-v1";
 const MAX = 12;
@@ -60,4 +60,36 @@ export function voyageBits(v: VoyageInfo): Pick<VoyageLog, "vessel" | "voyage" |
 export function logLabel(e: VoyageLog): string {
   const name = [e.vessel, e.voyage].filter(Boolean).join(" ") || e.sourceName || "Voyage";
   return name;
+}
+
+const CARGO_KEY = "cdc-enoad-cargo-v1";
+
+export interface StoredCargo {
+  at: number;
+  voyage: VoyageInfo;
+  sourceName?: string;
+  sources?: string[];
+  lines: LineInput[];
+}
+
+export function saveCargo(entry: StoredCargo) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(CARGO_KEY, JSON.stringify(entry));
+  } catch {
+    /* quota */
+  }
+}
+
+export function loadCargo(): StoredCargo | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(CARGO_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredCargo;
+    if (!parsed?.lines?.length) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }

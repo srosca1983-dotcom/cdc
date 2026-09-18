@@ -133,6 +133,9 @@ describe("real Pasha DCM workbook", () => {
     assert.equal(u2810.hazClass, "6.1");
     assert.ok(u2810.quantityKg !== null && u2810.quantityKg < 10);
     assert.match(u2810.packaging, /CN/i);
+    const withStow = parsed.lines.filter((l) => l.stowLoc);
+    assert.ok(withStow.length > 800, `expected Stow Loc on cargo rows, got ${withStow.length}`);
+    assert.match(withStow[0].stowLoc ?? "", /^\d{6,7}$/);
 
     const result = evaluateManifest(parsed.lines, CONTAINER_OPTIONS);
     assert.equal(result.cdc, 0);

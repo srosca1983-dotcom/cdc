@@ -1,6 +1,7 @@
 import { lookupUn, resolveOcrUn } from "./catalog.ts";
 import { classFromToken, normalizeUn } from "./imdg.ts";
 import { parseQuantityToKg } from "./quantity.ts";
+import { stowFromRowText } from "../ship/stow.ts";
 import type { LineInput, ParseResult, VoyageInfo } from "./types.ts";
 
 const HEADERISH = /UN\/?NA|PROPER\s*SHIPPING|HAZ\s*CLASS|WEIGHT\s*\(POUNDS\)/i;
@@ -110,6 +111,8 @@ function parseTableLine(raw: string, rowIndex: number): LineInput | null {
 
   const tech = name.match(/\(([^)]+)\)/)?.[0];
   const limitedQty = /ltd\s*qty|limited\s*q/i.test(raw);
+  const container = raw.match(/\b([A-Z]{4}\d{7})\b/)?.[1];
+  const stowLoc = stowFromRowText(raw);
 
   return {
     rowIndex,
@@ -124,6 +127,8 @@ function parseTableLine(raw: string, rowIndex: number): LineInput | null {
     raw: [raw],
     technicalName: tech,
     limitedQty: limitedQty || undefined,
+    container,
+    stowLoc,
   };
 }
 

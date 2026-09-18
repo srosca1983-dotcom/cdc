@@ -37,6 +37,32 @@ function unBag(lines: LineInput[]): Map<string, { n: number; name: string }> {
   return m;
 }
 
+export function mergeStowFromAll(results: ParseResult[]): ParseResult | null {
+  const preferred = selectPreferred(results);
+  if (!preferred) return null;
+  const others = results.filter((r) => r !== preferred && r.lines.length > 0);
+  if (others.length === 0) return preferred;
+  const byContainer = new Map<string, LineInput>();
+  for (const o of others) {
+    for (const l of o.lines) {
+      const c = l.container?.toUpperCase();
+      if (c) byContainer.set(c, l);
+    }
+  }
+  return {
+    ...preferred,
+    lines: preferred.lines.map((l) => {
+      if (l.stowLoc && l.container) return l;
+      const hit = l.container ? byContainer.get(l.container.toUpperCase()) : undefined;
+      return {
+        ...l,
+        stowLoc: l.stowLoc || hit?.stowLoc,
+        container: l.container || hit?.container,
+      };
+    }),
+  };
+}
+
 export function selectPreferred(results: ParseResult[]): ParseResult | null {
   const withLines = results.filter((r) => r.lines.length > 0);
   if (withLines.length === 0) return null;

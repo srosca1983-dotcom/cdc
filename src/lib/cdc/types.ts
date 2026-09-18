@@ -73,6 +73,7 @@ export interface LineInput {
   limitedQty?: boolean;
   /** Hazard Zone A–D from the shipping paper, if a column or the name carries it. */
   hazardZone?: string;
+  stowLoc?: string;
 }
 
 export interface LineResult {

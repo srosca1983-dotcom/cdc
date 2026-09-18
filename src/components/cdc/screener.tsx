@@ -48,6 +48,7 @@ import { isBaplieFilename, looksLikeBaplie, parseBaplie } from "@/lib/baplie/par
 import { SAMPLE_BAPLIE } from "@/lib/baplie/sample.ts";
 import { loadBaplie, saveBaplie } from "@/lib/baplie/store.ts";
 import type { BapliePlan } from "@/lib/baplie/types.ts";
+import { BaplieSummary } from "@/components/cdc/baplie-summary.tsx";
 
 type Tab = "manifest" | "ship" | "response" | "lookup" | "rules";
 type Filter = "flagged" | "all" | "CDC" | "REVIEW" | "NOT_CDC" | "full" | "lq";
@@ -532,7 +533,7 @@ function ManifestPanel({
         </div>
       </section>
 
-      <section className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)] sm:p-5">
+      <section id="baplie-panel" className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)] sm:p-5">
         <div className="flex flex-col gap-3">
           <div>
             <h2 className="text-base font-medium">BAPLIE (optional)</h2>
@@ -600,6 +601,7 @@ function ManifestPanel({
           {baplie?.warnings.length ? (
             <p className="text-xs text-review">{baplie.warnings.join(" ")}</p>
           ) : null}
+          {baplie ? <BaplieSummary plan={baplie} /> : null}
         </div>
       </section>
 

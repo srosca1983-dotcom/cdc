@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
     "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/cdc/evaluate.test.ts src/lib/cdc/ingest.test.ts",
-    "test:cdc": "node --experimental-strip-types --test src/lib/cdc/evaluate.test.ts src/lib/cdc/ingest.test.ts src/lib/cdc/limited.test.ts src/lib/ship/stow.test.ts src/lib/ship/segregation.test.ts src/lib/baplie/parse.test.ts src/lib/baplie/overlay.test.ts src/lib/erg/voyage-risks.test.ts",
+    "test:cdc": "node --experimental-strip-types --test src/lib/cdc/evaluate.test.ts src/lib/cdc/ingest.test.ts src/lib/cdc/limited.test.ts src/lib/ship/stow.test.ts src/lib/ship/segregation.test.ts src/lib/baplie/parse.test.ts src/lib/baplie/overlay.test.ts src/lib/baplie/summary.test.ts src/lib/erg/voyage-risks.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

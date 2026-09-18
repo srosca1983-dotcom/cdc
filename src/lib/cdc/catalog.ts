@@ -265,6 +265,43 @@ export function lookupUn(un: string): CatalogEntry | undefined {
   return CATALOG[un];
 }
 
+function tokens(s: string): string[] {
+  return s
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .split(" ")
+    .filter((t) => t.length >= 4);
+}
+
+function nameScore(catalogName: string, ocrName: string): number {
+  const hay = ocrName.toUpperCase();
+  return tokens(catalogName).reduce((n, t) => n + (hay.includes(t) ? 1 : 0), 0);
+}
+
+/**
+ * OCR on a scanned DCM sometimes flips a digit (1075 LPG → 1076 phosgene).
+ * Only move the UN when this UN is in the catalog and the printed name
+ * does not match it.
+ */
+export function resolveOcrUn(un: string, name: string): string {
+  if (!un || !name) return un;
+  const current = lookupUn(un);
+  if (!current) return un;
+  const currentScore = nameScore(current.name, name);
+  if (currentScore >= 1) return un;
+  let bestUn = un;
+  let best = 0;
+  for (const e of Object.values(CATALOG)) {
+    const s = nameScore(e.name, name);
+    if (s > best) {
+      best = s;
+      bestUn = e.un;
+    }
+  }
+  if (best >= 2) return bestUn;
+  return un;
+}
+
 export function hasFlag(entry: CatalogEntry | undefined, flag: CatalogFlag): boolean {
   return Boolean(entry?.flags.includes(flag));
 }

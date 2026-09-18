@@ -7,6 +7,8 @@ import {
   parseCombinedHazmat,
   parseHazardClass,
 } from "./imdg.ts";
+import { looksLikeExp023, parseExp023Text } from "./exp023.ts";
+import { looksLikeTableDcm, parseTableDcmText } from "./table-dcm.ts";
 
 const UN_ALIASES = [
   /^un\/?na$/,
@@ -479,6 +481,16 @@ export function parseManifest(text: string, defaultQtyUnit: QtyUnit = DEFAULT_OP
       voyage: {},
       unitGuess: defaultQtyUnit,
     };
+  }
+  if (looksLikeExp023(trimmed)) {
+    const parsed = parseExp023Text(trimmed);
+    parsed.voyage = coalesceVoyage([parsed.voyage]);
+    return parsed;
+  }
+  if (looksLikeTableDcm(trimmed)) {
+    const parsed = parseTableDcmText(trimmed);
+    parsed.voyage = coalesceVoyage([parsed.voyage]);
+    return parsed;
   }
   const delimiter = detectDelimiter(trimmed);
   const delimChar = delimiter === "tab" ? "\t" : delimiter === "semicolon" ? ";" : ",";

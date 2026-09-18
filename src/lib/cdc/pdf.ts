@@ -1,5 +1,8 @@
 import { classFromToken, normalizeUn } from "./imdg.ts";
 import { coalesceVoyage } from "./parse.ts";
+import { looksLikeExp023, parseExp023Text } from "./exp023.ts";
+import { looksLikeTableDcm, parseTableDcmText } from "./table-dcm.ts";
+import { extractPdfRasters } from "./pdf-image.ts";
 import { parseQuantityToKg } from "./quantity.ts";
 import type { LineInput, ParseResult, VoyageInfo } from "./types.ts";
 
@@ -19,7 +22,7 @@ const WEIGHT_UNIT = /^(LBS?|KGS?|MT|POUNDS?|KILOGRAMS?)$/i;
 const SKIP_NAME = /^(FLAMMABLE|CORROSIVE|TOXIC|OXIDIZING|MISC|LIMITED|NON-FLAMMABLE|GROUP|SUBSTANCES)/i;
 
 export const SCAN_PDF_WARNING =
-  "This PDF is a photograph of a signed DCM — there is no text to read. Drop the Excel DCM (.xlsx) or the printed hazardous cargo manifest (the EXP023AR file), not the signed scan.";
+  "This PDF is a photograph or fax of a signed DCM. If reading the scan failed, drop the Excel DCM (.xlsx) or the Word FINAL DCM (.doc).";
 
 function toUint8(data: ArrayBuffer | Uint8Array): Uint8Array {
   return new Uint8Array(data instanceof Uint8Array ? data : data);
@@ -120,6 +123,24 @@ export function linesFromPdfTokens(tokens: PdfToken[], startIndex = 0): LineInpu
   return lines;
 }
 
+function parsedFromOcrText(text: string, sourceName: string, voyage: VoyageInfo): ParseResult | null {
+  if (!text.trim()) return null;
+  if (looksLikeExp023(text)) {
+    const parsed = parseExp023Text(text, sourceName);
+    parsed.warnings.unshift("Read from a scanned page. Prefer the Excel DCM when you have it.");
+    parsed.voyage = coalesceVoyage([parsed.voyage, voyage], sourceName);
+    return parsed;
+  }
+  if (looksLikeTableDcm(text) || (text.match(/^\s*\d{3,5}\s+[A-Z]/gm) ?? []).length >= 3) {
+    const parsed = parseTableDcmText(text, sourceName);
+    if (parsed.lines.length === 0) return null;
+    parsed.warnings.unshift("Read from a scanned page. Prefer the Excel DCM when you have it.");
+    parsed.voyage = coalesceVoyage([parsed.voyage, voyage], sourceName);
+    return parsed;
+  }
+  return null;
+}
+
 export async function parsePdfArrayBuffer(
   data: ArrayBuffer | Uint8Array,
   sourceName = "manifest.pdf",
@@ -131,8 +152,9 @@ export async function parsePdfArrayBuffer(
     pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
   }
   const bytes = toUint8(data);
+  const pdfBytes = bytes.slice();
   const pdf = await pdfjs.getDocument({
-    data: bytes,
+    data: pdfBytes,
     isEvalSupported: false,
     useSystemFonts: true,
     disableWorker: typeof window === "undefined",
@@ -143,16 +165,19 @@ export async function parsePdfArrayBuffer(
   let voyage: VoyageInfo = {};
   const total = pdf.numPages;
   let textChars = 0;
+  const pageTexts: string[] = [];
 
   for (let n = 1; n <= total; n++) {
     const page = await pdf.getPage(n);
     const content = await page.getTextContent({ includeMarkedContent: false });
     const tokens: PdfToken[] = [];
+    const parts: string[] = [];
     for (const item of content.items) {
       if (!("str" in item)) continue;
       const str = String(item.str ?? "").trim();
       if (!str) continue;
       textChars += str.length;
+      parts.push(str);
       const tr = item.transform;
       tokens.push({
         str,
@@ -160,15 +185,68 @@ export async function parsePdfArrayBuffer(
         y: Math.round(tr[5]),
       });
     }
+    pageTexts.push(parts.join("\n"));
     if (n === 1) voyage = extractPdfVoyage(tokens);
     const pageLines = linesFromPdfTokens(tokens, lines.length);
     lines.push(...pageLines);
     onProgress?.(n, total);
   }
 
+  let extraText = pageTexts.join("\n");
+  if (lines.length === 0 && extraText.trim()) {
+    if (looksLikeExp023(extraText)) {
+      const parsed = parseExp023Text(extraText, sourceName);
+      parsed.voyage = coalesceVoyage([parsed.voyage, voyage], sourceName);
+      return parsed;
+    }
+    if (looksLikeTableDcm(extraText)) {
+      const parsed = parseTableDcmText(extraText, sourceName);
+      parsed.voyage = coalesceVoyage([parsed.voyage, voyage], sourceName);
+      return parsed;
+    }
+  }
+
+  if (lines.length === 0 && textChars < 20) {
+    try {
+      const rasters = extractPdfRasters(bytes).filter((r) => {
+        if (r.kind === "tiff") return true;
+        return Boolean(r.width && r.height && r.width >= r.height);
+      });
+      if (rasters.length > 0) {
+        onProgress?.(0, rasters.length);
+        const { ocrRaster } = await import("./ocr.ts");
+        const ocrParts: string[] = [];
+        const pagesToRead = Math.min(rasters.length, 8);
+        for (let i = 0; i < pagesToRead; i++) {
+          ocrParts.push(await ocrRaster(rasters[i]));
+          onProgress?.(i + 1, pagesToRead);
+        }
+        const ocrHit = parsedFromOcrText(ocrParts.join("\n"), sourceName, voyage);
+        if (ocrHit) return ocrHit;
+      } else if (typeof document !== "undefined") {
+        onProgress?.(0, total);
+        const { ocrCanvas, renderPdfPageToCanvas } = await import("./ocr.ts");
+        const ocrParts: string[] = [];
+        const pagesToRead = Math.min(total, 8);
+        for (let n = 1; n <= pagesToRead; n++) {
+          const page = await pdf.getPage(n);
+          const canvas = await renderPdfPageToCanvas(page as never, 1.6);
+          ocrParts.push(await ocrCanvas(canvas));
+          onProgress?.(n, pagesToRead);
+        }
+        const ocrHit = parsedFromOcrText(ocrParts.join("\n"), sourceName, voyage);
+        if (ocrHit) return ocrHit;
+      }
+    } catch (err) {
+      warnings.push(
+        `${SCAN_PDF_WARNING} (${err instanceof Error ? err.message : "OCR failed"})`,
+      );
+    }
+  }
+
   voyage = coalesceVoyage([voyage], sourceName);
 
-  if (lines.length === 0) {
+  if (lines.length === 0 && !warnings.length) {
     warnings.push(textChars < 20 ? SCAN_PDF_WARNING : "No UN numbers were found in the PDF.");
   }
 

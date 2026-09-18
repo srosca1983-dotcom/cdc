@@ -125,7 +125,7 @@ export interface ParseResult {
   header: string[];
   lines: LineInput[];
   warnings: string[];
-  delimiter: "tab" | "comma" | "semicolon" | "xlsx" | "pdf";
+  delimiter: "tab" | "comma" | "semicolon" | "xlsx" | "pdf" | "doc" | "docx";
   voyage: VoyageInfo;
   unitGuess: QtyUnit;
   sourceName?: string;

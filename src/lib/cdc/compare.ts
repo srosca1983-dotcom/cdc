@@ -93,5 +93,6 @@ export function compareManifests(a: ParseResult, b: ParseResult): ManifestCompar
 export function kindLabel(kind: string): string {
   if (kind === "xlsx") return "Excel DCM";
   if (kind === "pdf") return "Printed manifest";
+  if (kind === "doc" || kind === "docx") return "Word DCM";
   return kind.toUpperCase();
 }

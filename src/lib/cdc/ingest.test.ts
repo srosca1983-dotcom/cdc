@@ -10,6 +10,10 @@ import { ingestBuffer } from "./ingest.ts";
 import { classifyPackaging } from "./packaging.ts";
 import { extractVoyage, parseManifest, pickVoyage, voyageFromFilename } from "./parse.ts";
 import { linesFromPdfTokens, extractPdfVoyage, SCAN_PDF_WARNING } from "./pdf.ts";
+import { linesFromExp023Text, parseExp023Text } from "./exp023.ts";
+import { parseTableDcmText } from "./table-dcm.ts";
+import { extractPdfRasters } from "./pdf-image.ts";
+import { resolveOcrUn } from "./catalog.ts";
 import { PASHA_SAMPLE, WORKED_SAMPLE } from "./sample.ts";
 import { categoryScan } from "./scan.ts";
 import { CONTAINER_OPTIONS } from "./types.ts";
@@ -270,5 +274,121 @@ describe("xlsx vs pdf compare", () => {
     assert.equal(cmp.agreesCdc, true);
     assert.ok(cmp.mismatches.length >= 1);
     assert.equal(selectPreferred([a, b])?.sourceName, "dcm.xlsx");
+  });
+});
+
+const EXP023_SNIPPET = `VESSEL: GEORGE II
+VOYAGE: 070W
+PORT OF LOADING: LONG BEACH
+DISCHARGE PORT: HONOLULU
+CAIU5871660                2.1                     0460286                              1,1-DIFLUOROETHANE
+3607010952      1  LB     PHH   UN 1030
+1 CARTON                                           18004249300         WALMART APPLE
+LIMITED QUANTITIES
+LTD QTY
+CAIU5871660                2.2 (6.1)               0460286                              AEROSOLS
+3607010952      1  LB     PHH   UN 1950
+1 CARTON
+LTD QTY
+CAIU5874037                9                       0261088                              LITHIUM ION BATTERIES
+3607011834      93  LB    PHH   UN 3480
+9 BOX`;
+
+const TABLE_DCM_SNIPPET = `DCM G2069E
+COMPANY NAME: PASHA HAWAII
+POL: HNL
+POD: LGB
+Voyage: 069E
+Vessel: GEORGE II
+UN/NA NO Proper Shipping Name/Technical Name HAZ Class Packg Group Additional Info Weight (Pounds) Qty Packaging
+2672 AMMONIA SOLUTION / 8 3 RQ, RESIDUE LAST CONTAINED 6,989 1 TANK
+2794 BATTERIES, WET, FILLED WITH ACID / 8 33626 13 PALLET
+3480 LITHIUM ION BATTERIES / 9 153 1 BOX
+1075 PETROLEUM GASES, LIQUEFIED / 2.1 RESIDUE LAST CONTAINED 26999 1008 CYL
+2794 BATTERIES, WET, FILLED WITH ACID / 8 42955 16 PALLET`;
+
+describe("EXP023AR Word / text dump", () => {
+  it("reads container, class, UN, pounds, and carton from a report block", () => {
+    const lines = linesFromExp023Text(EXP023_SNIPPET);
+    assert.equal(lines.length, 3);
+    assert.equal(lines[0].un, "1030");
+    assert.equal(lines[0].hazClass, "2.1");
+    assert.match(lines[0].name, /DIFLUOROETHANE/);
+    assert.match(lines[0].packaging, /CARTON/i);
+    assert.equal(lines[0].limitedQty, true);
+    assert.ok(lines[0].quantityKg !== null && lines[0].quantityKg < 1);
+    assert.equal(lines[1].hazClass, "2.2");
+    assert.equal(lines[1].subsidiary, "6.1");
+    const parsed = parseExp023Text(EXP023_SNIPPET, "GEORGE II 070W FINAL DCM.doc");
+    assert.equal(parsed.voyage.vessel, "GEORGE II");
+    assert.equal(parsed.voyage.voyage, "070W");
+  });
+
+  it("reads the real 070W Word FINAL DCM", async () => {
+    const buf = readFileSync(join(ATTACH, "GEORGE II 070W FINAL DCM.doc"));
+    const parsed = await ingestBuffer(buf, "GEORGE II 070W FINAL DCM.doc");
+    assert.ok(parsed.lines.length >= 1000, `expected ~1112 lines, got ${parsed.lines.length}`);
+    assert.match(parsed.voyage.vessel ?? "", /GEORGE II/i);
+    assert.match(parsed.voyage.voyage ?? "", /070W/i);
+    assert.ok(parsed.lines.some((l) => l.un === "3480"));
+    assert.ok(parsed.lines.some((l) => l.un === "1030"));
+    const result = evaluateManifest(parsed.lines, CONTAINER_OPTIONS);
+    assert.equal(result.cdc, 0);
+    assert.equal(enoadPasteBlock(result), NO_CDC_PASTE);
+  });
+});
+
+describe("printed Pasha table DCM", () => {
+  it("reads UN / class / pounds / tank from a G2069E-style table", () => {
+    const parsed = parseTableDcmText(TABLE_DCM_SNIPPET, "20260908091617376.pdf");
+    assert.ok(parsed.lines.length >= 4);
+    const ammonia = parsed.lines.find((l) => l.un === "2672");
+    assert.ok(ammonia);
+    assert.equal(ammonia?.hazClass, "8");
+    assert.match(ammonia?.packaging ?? "", /TANK/i);
+    assert.ok(ammonia?.quantityKg && ammonia.quantityKg > 3000);
+    assert.equal(parsed.voyage.voyage, "069E");
+    const result = evaluateManifest(parsed.lines, CONTAINER_OPTIONS);
+    assert.equal(result.cdc, 0);
+  });
+
+  it("corrects OCR digit slips using the shipping name", () => {
+    assert.equal(resolveOcrUn("1076", "PETROLEUM GASES, LIQUEFIED"), "1075");
+    assert.equal(resolveOcrUn("2672", "AMMONIA SOLUTION"), "2672");
+    const parsed = parseTableDcmText(
+      `DCM G2069E
+UN/NA NO Proper Shipping Name HAZ Class Weight (Pounds) Packaging
+1076 PETROLEUM GASES, LIQUEFIED / 21 RESIDUE LAST CONTAINED 26,999 1,008 CYL
+3480 LITHIUM ION BATTERIES / 4 153 1 80X
+2672 AMMONIA SOLUTION / 8 3 RQ, RESIDUE LAST CONTAINED 6,989 1 TANK`,
+      "scan.pdf",
+    );
+    const lpg = parsed.lines.find((l) => l.un === "1075");
+    const li = parsed.lines.find((l) => l.un === "3480");
+    assert.ok(lpg);
+    assert.equal(lpg?.hazClass, "2.1");
+    assert.equal(li?.packaging, "BOX");
+    assert.equal(li?.hazClass, "9");
+  });
+
+  it("extracts the G2069E fax image from the PDF", () => {
+    const buf = readFileSync(join(ATTACH, "20260908091617376.pdf"));
+    const rasters = extractPdfRasters(buf);
+    assert.equal(rasters.length, 1);
+    assert.equal(rasters[0].kind, "tiff");
+    assert.equal(rasters[0].width, 2800);
+    assert.equal(rasters[0].height, 1700);
+  });
+
+  it("reads the real G2069E fax scan", { timeout: 120000 }, async () => {
+    const buf = readFileSync(join(ATTACH, "20260908091617376.pdf"));
+    const parsed = await ingestBuffer(buf, "20260908091617376.pdf");
+    assert.ok(parsed.lines.length >= 8, `expected ~11 lines, got ${parsed.lines.length}`);
+    assert.ok(parsed.lines.some((l) => l.un === "2672"));
+    assert.ok(parsed.lines.some((l) => l.un === "1075"), "LPG must stay UN 1075, not phosgene 1076");
+    assert.ok(!parsed.lines.some((l) => l.un === "1076"));
+    const result = evaluateManifest(parsed.lines, CONTAINER_OPTIONS);
+    assert.equal(result.cdc, 0);
+    assert.equal(enoadPasteBlock(result), NO_CDC_PASTE);
   });
 });

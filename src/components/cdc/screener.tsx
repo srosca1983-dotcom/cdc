@@ -76,7 +76,7 @@ function Header({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
                 Certain Dangerous Cargo for the Master
               </h1>
               <p className="mt-1 max-w-2xl text-sm text-primary-foreground/70">
-                Drop the Excel dangerous cargo manifest (or the printed PDF). The
+                Drop the Excel DCM, the Word FINAL DCM, or the printed EXP023AR PDF. The
                 engine screens every line, shows why CDC is YES or NO against the
                 nine 160.202 families, and writes the eNOAD cargo block for an
                 email to the Master.
@@ -171,7 +171,7 @@ function ManifestPanel() {
 
   async function onFiles(files: FileList | File[]) {
     const list = [...files].filter((f) =>
-      /\.(xlsx|xls|xlsm|pdf|csv|tsv|txt)$/i.test(f.name),
+      /\.(xlsx|xls|xlsm|pdf|csv|tsv|txt|doc|docx)$/i.test(f.name),
     );
     if (list.length === 0) return;
     setProgress(null);
@@ -182,18 +182,23 @@ function ManifestPanel() {
       for (let i = 0; i < Math.min(list.length, 2); i++) {
         const file = list[i];
         const isPdf = file.name.toLowerCase().endsWith(".pdf");
+        const isDoc = /\.docx?$/i.test(file.name);
         setBusy(
           list.length > 1
             ? `Reading file ${i + 1} of ${Math.min(list.length, 2)}…`
             : isPdf
               ? "Reading PDF…"
-              : "Reading workbook…",
+              : isDoc
+                ? "Reading Word DCM…"
+                : "Reading workbook…",
         );
         const next = await ingestFile(file, (done, total) => {
           setBusy(
             list.length > 1
               ? `File ${i + 1}: page ${done} of ${total}`
-              : `Reading PDF page ${done} of ${total}`,
+              : total > 0 && done === 0
+                ? "Reading scanned DCM…"
+                : `Reading PDF page ${done} of ${total}`,
           );
           setProgress({ done, total });
         });
@@ -270,9 +275,9 @@ function ManifestPanel() {
           <div>
             <h2 className="text-base font-medium">Dangerous cargo manifest</h2>
             <p className="mt-1 text-sm text-muted">
-              Prefer the Excel DCM — exact pounds and the combined UN / name / class cell.
-              Drop the printed haz-manifest with it to confirm they agree. A signed photo
-              of the DCM cannot be read.
+                Drop the Excel DCM (.xlsx), the Word FINAL DCM (.doc), or the printed
+                EXP023AR PDF. A signed fax/scan of the table is slower (OCR) and
+                less exact — prefer Excel when you have it.
             </p>
           </div>
 
@@ -294,7 +299,7 @@ function ManifestPanel() {
                 ref={fileRef}
                 type="file"
                 multiple
-                accept=".xlsx,.xls,.xlsm,.pdf,.csv,.tsv,.txt,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                accept=".xlsx,.xls,.xlsm,.pdf,.doc,.docx,.csv,.tsv,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 disabled={Boolean(busy)}
                 aria-label="Upload dangerous cargo manifest"
                 className="absolute inset-0 z-10 cursor-pointer opacity-0"
@@ -308,10 +313,10 @@ function ManifestPanel() {
               <Upload className="size-5" />
             </span>
             <span className="pointer-events-none text-sm font-medium">
-              Drop Excel DCM, printed haz-manifest, or both
+              Drop Excel, Word FINAL DCM, printed PDF, or both
             </span>
             <span className="pointer-events-none text-xs text-muted">
-              Signed photo of the DCM cannot be read · CSV / TSV also accepted
+              Signed photo / fax of the table uses OCR · Excel is still the cleanest
             </span>
             {busy ? (
               <span className="pointer-events-none mt-2 w-full max-w-xs">

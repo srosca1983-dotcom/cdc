@@ -1,4 +1,4 @@
-import { parseManifest } from "./parse.ts";
+import { parseManifest, coalesceVoyage } from "./parse.ts";
 import type { ParseResult } from "./types.ts";
 
 export type IngestProgress = (done: number, total: number) => void;
@@ -25,8 +25,23 @@ export async function ingestBuffer(
     const { parseXlsxArrayBuffer } = await import("./xlsx.ts");
     return parseXlsxArrayBuffer(data, filename);
   }
+  if (name.endsWith(".doc") || name.endsWith(".docx")) {
+    const { extractDocText } = await import("./doc.ts");
+    const text = extractDocText(data);
+    const parsed = parseManifest(text, "lb");
+    parsed.sourceName = filename;
+    parsed.voyage = coalesceVoyage([parsed.voyage], filename);
+    parsed.delimiter = name.endsWith(".docx") ? "docx" : "doc";
+    if (parsed.lines.length === 0) {
+      parsed.warnings.push(
+        "This Word file had no UN numbers. Drop the Excel DCM or the EXP023AR hazardous cargo manifest.",
+      );
+    }
+    return parsed;
+  }
   const parsed = parseManifest(decodeText(data), "lb");
   parsed.sourceName = filename;
+  parsed.voyage = coalesceVoyage([parsed.voyage], filename);
   return parsed;
 }
 

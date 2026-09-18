@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USCG Certain Dangerous Cargo (CDC) Auditor</title>
+    <!-- Tailwind CSS for sleek styling -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 font-sans min-h-screen text-gray-800">
+
+    <div class="max-w-6xl mx-auto p-6">
+        <!-- Header -->
+        <header class="bg-indigo-900 text-white rounded-xl p-6 shadow-md mb-6 flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold tracking-tight">USCG Certain Dangerous Cargo (CDC) Auditor</h1>
+                <p class="text-indigo-200 text-sm mt-1">Standalone Manifest Evaluation Tool (33 CFR § 160.202)</p>
+            </div>
+            <span class="bg-indigo-800 text-indigo-200 font-mono text-xs px-3 py-1 rounded-full border border-indigo-700">v1.0 Local App</span>
+        </header>
+
+        <!-- Main Content Layout -->
+        <div class="grid grid-cols-1 gap-6">
+            
+            <!-- Input Card -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Paste Dangerous Cargo Manifest (DCM) Data Here</label>
+                <p class="text-xs text-gray-500 mb-3">Copy rows directly from Excel or a CSV and paste them below. Include the column header row if possible.</p>
+                
+                <textarea id="manifestInput" class="w-full h-48 p-3 font-mono text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 mb-4" placeholder="UN/NA NO	Proper Shipping Name	HAZ Class	Packaging..."></textarea>
+                
+                <div class="flex flex-wrap gap-3">
+                    <button id="btnAnalyze" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition shadow-sm">
+                        Analyze Manifest
+                    </button>
+                    <button id="btnSample" class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium px-4 py-2.5 rounded-lg transition border border-gray-300">
+                        Load Sample Data
+                    </button>
+                    <button id="btnClear" class="bg-white hover:bg-gray-50 text-gray-500 text-sm font-medium px-4 py-2.5 rounded-lg transition border border-gray-200 ml-auto">
+                        Clear
+                    </button>
+                </div>
+            </div>
+
+            <!-- Summary Dashboard (Hidden by default) -->
+            <div id="dashboardSection" class="hidden grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-white border border-gray-200 rounded-xl p-5 flex items-center shadow-sm">
+                    <div class="p-3 rounded-lg bg-gray-100 text-gray-600 mr-4 font-bold text-xl">📋</div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">Total Rows Evaluated</p>
+                        <h3 id="statTotal" class="text-2xl font-bold text-gray-800">0</h3>
+                    </div>
+                </div>
+                <div id="cardCdc" class="bg-white border border-gray-200 rounded-xl p-5 flex items-center shadow-sm transition">
+                    <div id="iconCdc" class="p-3 rounded-lg bg-gray-100 text-gray-600 mr-4 font-bold text-xl">🚨</div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">Confirmed CDCs</p>
+                        <h3 id="statCdc" class="text-2xl font-bold text-gray-800">0</h3>
+                    </div>
+                </div>
+                <div id="cardReview" class="bg-white border border-gray-200 rounded-xl p-5 flex items-center shadow-sm transition">
+                    <div id="iconReview" class="p-3 rounded-lg bg-gray-100 text-gray-600 mr-4 font-bold text-xl">⚠️</div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">Manual Reviews Required</p>
+                        <h3 id="statReview" class="text-2xl font-bold text-gray-800">0</h3>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Table Card -->
+            <div id="resultsCard" class="hidden bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div class="border-b border-gray-200 bg-gray-50 px-6 py-4">
+                    <h2 class="text-sm font-semibold text-gray-800">Flagged Exceptions Log</h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="bg-gray-100 text-gray-600 uppercase text-xs font-semibold border-b border-gray-200">
+                                <th class="px-6 py-3">UN / NA</th>
+                                <th class="px-6 py-3">HAZ Class</th>
+                                <th class="px-6 py-3">Packaging</th>
+                                <th class="px-6 py-3">Status Flag</th>
+                                <th class="px-6 py-3">Regulatory Basis / Guidance</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody">
+                            <!-- Dynamic Content -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="clearState" class="hidden text-center py-12 px-4">
+                    <div class="text-4xl mb-2">✅</div>
+                    <h3 class="text-lg font-medium text-gray-800">Manifest is Clear</h3>
+                    <p class="text-sm text-gray-500 max-w-md mx-auto mt-1">No items triggered strict CDC classifications or bulk secondary review requirements.</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- JavaScript Audit Logic -->
+    <script>
+        const sampleData = "UN/NA NO\tProper Shipping Name\tHAZ Class\tPackaging\n3480\tLITHIUM ION BATTERIES\t9\tBOX\n1049\tHYDROGEN\t2.1\tCYL\n3265\tCORROSIVE LIQUID\t8\tBOX\n1005\tAMMONIA ANHYDROUS\t2.3\tTANK\n2910\tRADIOACTIVE MATERIAL\t7\tBOX\n1992\tFLAMMABLE LIQUID TOXIC\t3\tTANK\n1942\tAMMONIUM NITRATE\t5.1\tBAG";
+
+        document.getElementById('btnSample').addEventListener('click', () => {
+            document.getElementById('manifestInput').value = sampleData;
+        });
+
+        document.getElementById('btnClear').addEventListener('click', () => {
+            document.getElementById('manifestInput').value = '';
+            document.getElementById('dashboardSection').classList.add('hidden');
+            document.getElementById('resultsCard').classList.add('hidden');
+        });
+
+        document.getElementById('btnAnalyze').addEventListener('click', () => {
+            const text = document.getElementById('manifestInput').value.trim();
+            if (!text) return alert("Please paste manifest data first.");
+
+            // Split into rows and dynamic delimiter matching (tab or comma)
+            const lines = text.split('\n');
+            let rows = lines.map(line => line.split(/\t|,(?=(?:(?:[^"]*"){2})*[^"]*$)/)); 
+
+            // Dynamic Column Identification
+            let headerIdx = 0;
+            let unCol = 0, hazCol = 2, pkgCol = 3; // defaults
+            
+            for (let i = 0; i < Math.min(rows.length, 10); i++) {
+                let rowStr = rows[i].join(' ').toUpperCase();
+                if (rowStr.includes('UN/NA') || rowStr.includes('HAZ') || rowStr.includes('CLASS')) {
+                    headerIdx = i;
+                    rows[i].forEach((col, idx) => {
+                        let c = col.toUpperCase();
+                        if (c.includes('UN/NA') || c.includes('UN NO')) unCol = idx;
+                        if (c.includes('HAZ') || c.includes('CLASS')) hazCol = idx;
+                        if (c.includes('PACKAGING') || c.includes('PKG')) pkgCol = idx;
+                    });
+                    break;
+                }
+            }
+
+            // Strict Regulations Definitions
+            const cdcClasses = ['1.1', '1.2', '1.5', '2.3'];
+            const cdcUnNumbers = ['1005', '1017', '1079', '1942', '2067', '2426', '3375'];
+
+            let totalEvaluated = 0;
+            let cdcCount = 0;
+            let reviewCount = 0;
+            let outputHtml = '';
+
+            // Process Rows
+            for (let i = headerIdx + 1; i < rows.length; i++) {
+                let row = rows[i];
+                if (!row || row.length <= 1 || !row[unCol]) continue;
+
+                let unNum = row[unCol].replace(/["'\s]/g, '');
+                let hazClass = row[hazCol] ? row[hazCol].trim() : '';
+                let packaging = row[pkgCol] ? row[pkgCol].trim().toUpperCase() : '';
+
+                if (unNum.toLowerCase() === 'nan' || unNum === '') continue;
+                totalEvaluated++;
+
+                let isCdc = false;
+                let isReview = false;
+                let reason = '';
+
+                // Rule Evaluation
+                if (cdcClasses.some(cls => hazClass.startsWith(cls))) {
+                    isCdc = true;
+                    reason = `Strict CDC hazard class allocation (${hazClass}).`;
+                } else if (cdcUnNumbers.includes(unNum)) {
+                    isCdc = true;
+                    reason = `UN ${unNum} is automatically listed as a specific high-risk CDC.`;
+                } else if (hazClass.startsWith('7')) {
+                    isReview = true;
+                    reason = "Class 7 Radioactive. Check if volume meets Highway Route Controlled Quantity (HRCQ).";
+                } else if (hazClass.startsWith('6.1') || packaging.includes('TANK')) {
+                    isReview = true;
+                    reason = `Class ${hazClass || 'Bulk'} Item: Manually verify if secondary volume thresholds trigger a Bulk CDC status.`;
+                }
+
+                if (isCdc) {
+                    cdcCount++;
+                    outputHtml += `
+                        <tr class="border-b border-gray-100 bg-red-50 hover:bg-red-100 transition">
+                            <td class="px-6 py-4 font-mono font-semibold text-red-900">${unNum}</td>
+                            <td class="px-6 py-4 font-medium text-red-900">${hazClass}</td>
+                            <td class="px-6 py-4 text-gray-700">${packaging}</td>
+                            <td class="px-6 py-4"><span class="bg-red-600 text-white font-semibold text-xs px-2.5 py-1 rounded-md tracking-wider uppercase">🚨 CDC Alert</span></td>
+                            <td class="px-6 py-4 text-xs font-medium text-red-900">${reason}</td>
+                        </tr>`;
+                } else if (isReview) {
+                    reviewCount++;
+                    outputHtml += `
+                        <tr class="border-b border-gray-100 bg-amber-50 hover:bg-amber-100 transition">
+                            <td class="px-6 py-4 font-mono font-semibold text-amber-900">${unNum}</td>
+                            <td class="px-6 py-4 font-medium text-amber-900">${hazClass}</td>
+                            <td class="px-6 py-4 text-gray-700">${packaging}</td>
+                            <td class="px-6 py-4"><span class="bg-amber-500 text-white font-semibold text-xs px-2.5 py-1 rounded-md tracking-wider uppercase">⚠️ Review</span></td>
+                            <td class="px-6 py-4 text-xs font-medium text-amber-900">${reason}</td>
+                        </tr>`;
+                }
+            }
+
+            // Update DOM Elements
+            document.getElementById('statTotal').innerText = totalEvaluated;
+            document.getElementById('statCdc').innerText = cdcCount;
+            document.getElementById('statReview').innerText = reviewCount;
+
+            // Update Dashboard Visual Indicators
+            const cardCdc = document.getElementById('cardCdc');
+            const iconCdc = document.getElementById('iconCdc');
+            if (cdcCount > 0) {
+                cardCdc.className = "bg-red-50 border border-red-200 rounded-xl p-5 flex items-center shadow-sm";
+                iconCdc.className = "p-3 rounded-lg bg-red-600 text-white font-bold text-xl";
+            } else {
+                cardCdc.className = "bg-white border border-gray-200 rounded-xl p-5 flex items-center shadow-sm";
+                iconCdc.className = "p-3 rounded-lg bg-gray-100 text-gray-600 font-bold text-xl";
+            }
+
+            const cardReview = document.getElementById('cardReview');
+            const iconReview = document.getElementById('iconReview');
+            if (reviewCount > 0) {
+                cardReview.className = "bg-amber-50 border border-amber-200 rounded-xl p-5 flex items-center shadow-sm";
+                iconReview.className = "p-3 rounded-lg bg-amber-500 text-white font-bold text-xl";
+            } else {
+                cardReview.className = "bg-white border border-gray-200 rounded-xl p-5 flex items-center shadow-sm";
+                iconReview.className = "p-3 rounded-lg bg-gray-100 text-gray-600 font-bold text-xl";
+            }
+
+            // Populate Table Rows
+            const tbody = document.getElementById('resultsTableBody');
+            const clearState = document.getElementById('clearState');
+            
+            if (cdcCount === 0 && reviewCount === 0) {
+                tbody.innerHTML = '';
+                clearState.classList.remove('hidden');
+            } else {
+                tbody.innerHTML = outputHtml;
+                clearState.classList.add('hidden');
+            }
+
+            // Unhide Elements
+            document.getElementById('dashboardSection').classList.remove('hidden');
+            document.getElementById('resultsCard').classList.remove('hidden');
+        });
+    </script>
+</body>
+</html>

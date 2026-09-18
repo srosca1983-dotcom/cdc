@@ -1,0 +1,28 @@
+Subject: GEORGE II 069W — eNOAD CDC: NO
+
+Master,
+
+No cargo on this manifest meets a Certain Dangerous Cargo category. Paste the boxed block into the eNOAD cargo section (33 CFR 160.206 Table (3)).
+
+========== PASTE INTO eNOAD CARGO ==========
+GENERAL CARGO (other than CDC): CONTAINERIZED
+CDC CARRIED: NO
+============================================
+
+VESSEL: GEORGE II    VOYAGE: 069W
+LOAD: LBA    DISCHARGE: HNL
+SOURCE: DCM G2069W.xlsx
+SCREENED: 928 containerized DG line(s) against 33 CFR 160.202
+
+CATEGORY CHECK (why this determination):
+  1.1 / 1.2 explosives     none
+  1.5D (176.415 permit)    none
+  2.3 PIH gas > 1 MT       none
+  5.1 ammonium nitrate     none
+  6.1 PIH tank or > 20 MT  16 packaged line(s) under 20 MT — not CDC
+  Class 7 HRCQ / fissile   none
+  Bulk liquefied gas       none
+  Named bulk liquids       none
+  Bulk ammonium nitrate    none
+
+This is a screening aid based on 33 CFR 160.202. It is not a Coast Guard determination.

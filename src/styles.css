@@ -1,0 +1,95 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --font-sans: "IBM Plex Sans", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --color-bg: #f3f1eb;
+  --color-fg: #171a1e;
+  --color-muted: #5c6168;
+  --color-subtle: #7a7f86;
+  --color-surface: #fbfaf6;
+  --color-surface-2: #ece9e1;
+  --color-ink: #12161c;
+  --color-navy: #1a2836;
+  --color-navy-2: #243646;
+  --color-accent: #3e5a70;
+  --color-accent-fg: #f7f5ef;
+  --color-border: #d9d4c8;
+  --color-ring: #3e5a70;
+
+  --color-background: #f3f1eb;
+  --color-foreground: #171a1e;
+  --color-primary: #1a2836;
+  --color-primary-foreground: #f7f5ef;
+  --color-secondary: #ece9e1;
+  --color-secondary-foreground: #171a1e;
+  --color-card: #fbfaf6;
+  --color-card-foreground: #171a1e;
+  --color-muted-foreground: #5c6168;
+  --color-destructive: #8f2d2d;
+  --color-destructive-foreground: #fbfaf6;
+  --color-input: #d9d4c8;
+  --color-popover: #fbfaf6;
+  --color-popover-foreground: #171a1e;
+
+  --color-cdc: #8f2d2d;
+  --color-cdc-soft: #f6e8e6;
+  --color-review: #7a5414;
+  --color-review-soft: #f4ead6;
+  --color-ok: #215e45;
+  --color-ok-soft: #e3efe8;
+  --color-residue: #3e5a70;
+  --color-residue-soft: #e4ebf0;
+
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius: 0.5rem;
+
+  --shadow-border:
+    0px 0px 0px 1px rgba(23, 26, 30, 0.06),
+    0px 1px 2px -1px rgba(23, 26, 30, 0.06),
+    0px 2px 4px 0px rgba(23, 26, 30, 0.04);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

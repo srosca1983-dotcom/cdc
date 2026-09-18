@@ -17,7 +17,6 @@ export function hatchFromBay(bay: number): number {
   for (let i = 0; i < BAYS_BY_HATCH.length; i++) {
     if (BAYS_BY_HATCH[i].includes(bay)) return i + 1;
   }
-  if (bay >= 1 && bay <= 47) return Math.min(12, Math.max(1, Math.ceil(bay / 4)));
   return 0;
 }
 

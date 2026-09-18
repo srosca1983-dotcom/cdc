@@ -283,4 +283,22 @@ UNZ+1+1'
     ]);
     assert.equal(r.issues.filter((i) => /two boxes in one slot/i.test(i.title)).length, 0, JSON.stringify(r.issues));
   });
+
+  it("blocks a dry BAPLIE 40' on top of a DCM 20'", () => {
+    const edi = `UNA:+.? '
+UNB+UNOA:2+PASHA+GEORGEII+260918:1200+1'
+UNH+1+BAPLIE:D:95B:UN:SMDG22'
+BGM+34+T+9'
+LOC+147+0180284:139:5'
+EQD+CN+DRY400000001+45G1:102:5++2+5'
+UNT+10+1'
+UNZ+1+1'
+`;
+    const plan = parseBaplie(edi, "dry40.edi");
+    const r = screen(
+      [line({ un: "1263", hazClass: "3", container: "TWENT000001", stowLoc: "0170284", packaging: "6 PA", quantityKg: 200 })],
+      plan,
+    );
+    assert.ok(r.issues.some((i) => /two boxes in one slot/i.test(i.title)), JSON.stringify(r.issues));
+  });
 });

@@ -151,4 +151,55 @@ describe("BAPLIE", () => {
     assert.equal(reeferMotors({ raw: "", bay: 6, row: 5, tier: 4, onDeck: false, hatch: 2, fortyFoot: true }), "fwd");
     assert.equal(reeferMotors({ raw: "", bay: 6, row: 5, tier: 84, onDeck: true, hatch: 2, fortyFoot: true }), "aft");
   });
+
+  it("does not treat the opposite 20' or the next hatch as the reefer motor end", () => {
+    function heat(edi: string, container: string, stowLoc: string) {
+      const plan = parseBaplie(edi, "motor.edi");
+      const cargo: LineInput = {
+        rowIndex: 1,
+        un: "1263",
+        name: "PAINT",
+        hazClass: "3",
+        subsidiary: "",
+        packaging: "6 PA",
+        packingGroup: "III",
+        quantityKg: 200,
+        quantityRaw: "200 kg",
+        raw: [],
+        container,
+        stowLoc,
+      };
+      return reeferHeatIssues(evaluateManifest([cargo], CONTAINER_OPTIONS).lines, plan);
+    }
+    const opposite = heat(
+      `UNA:+.? '
+UNB+UNOA:2+PASHA+GEORGEII+260918:1200+1'
+UNH+1+BAPLIE:D:95B:UN:SMDG22'
+BGM+34+T+9'
+EQD+CN+RF17A0000001+22R1:102:5++2+5'
+LOC+147+0170184:139:5'
+TMP+2+-18:CEL'
+UNT+12+1'
+UNZ+1+1'
+`,
+      "PAINT1900001",
+      "0190184",
+    );
+    assert.equal(opposite.length, 0, JSON.stringify(opposite));
+    const nextHatch = heat(
+      `UNA:+.? '
+UNB+UNOA:2+PASHA+GEORGEII+260918:1200+1'
+UNH+1+BAPLIE:D:95B:UN:SMDG22'
+BGM+34+T+9'
+EQD+CN+RF19A0000002+22R1:102:5++2+5'
+LOC+147+0190184:139:5'
+TMP+2+-18:CEL'
+UNT+12+1'
+UNZ+1+1'
+`,
+      "PAINT2100001",
+      "0210184",
+    );
+    assert.equal(nextHatch.length, 0, JSON.stringify(nextHatch));
+  });
 });

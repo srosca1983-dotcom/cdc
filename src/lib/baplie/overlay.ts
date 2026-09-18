@@ -1,20 +1,23 @@
 import { containersOnHatch, type ContainerSlot, type HatchBucket } from "../ship/layout.ts";
-import { HATCHES, isRealRow, type HatchSpec } from "../ship/george-ii.ts";
+import { HATCHES, isRealRow, occupiedBays, type HatchSpec } from "../ship/george-ii.ts";
 import { containerKey, stowEqual, type StowPos } from "../ship/stow.ts";
 import type { BapliePlan } from "./types.ts";
 
-function locKey(stow: StowPos): string {
-  return `${stow.bay}-${stow.row}-${stow.tier}`;
+function footprintKeys(stow: StowPos): string[] {
+  return occupiedBays(stow).map(
+    (bay) => `${stow.hatch}-${bay}-${stow.row}-${stow.tier}-${stow.onDeck ? "d" : "h"}`,
+  );
 }
 
 function markConflicts(slots: ContainerSlot[]): void {
   const byLoc = new Map<string, ContainerSlot[]>();
   for (const s of slots) {
     if (!s.stow) continue;
-    const k = locKey(s.stow);
-    const cur = byLoc.get(k) ?? [];
-    cur.push(s);
-    byLoc.set(k, cur);
+    for (const k of footprintKeys(s.stow)) {
+      const cur = byLoc.get(k) ?? [];
+      cur.push(s);
+      byLoc.set(k, cur);
+    }
   }
   for (const group of byLoc.values()) {
     const keys = new Set(group.map((s) => containerKey(s.container)));
@@ -94,7 +97,9 @@ export function hatchSlots(bucket: HatchBucket, plan: BapliePlan | null): Contai
 
 function ghostOf(s: ContainerSlot, spec: HatchSpec): boolean {
   if (!s.stow) return false;
-  return !isRealRow(spec, s.stow.onDeck, s.stow.row);
+  if (!isRealRow(spec, s.stow.onDeck, s.stow.row)) return true;
+  if (s.stow.onDeck && s.stow.tier < 82) return true;
+  return false;
 }
 
 function sortSlots(slots: ContainerSlot[]): ContainerSlot[] {
@@ -110,7 +115,10 @@ function sortSlots(slots: ContainerSlot[]): ContainerSlot[] {
 }
 
 export function slotsAtBay(slots: ContainerSlot[], bay: number, row: number, tier: number): ContainerSlot[] {
-  return slots.filter((s) => s.stow?.bay === bay && s.stow?.row === row && s.stow?.tier === tier);
+  return slots.filter((s) => {
+    if (!s.stow || s.stow.row !== row || s.stow.tier !== tier) return false;
+    return occupiedBays(s.stow).includes(bay);
+  });
 }
 
 export function ghostSlots(slots: ContainerSlot[], spec?: HatchSpec): ContainerSlot[] {

@@ -1,4 +1,5 @@
 import type { LineResult } from "@/lib/cdc/types.ts";
+import { hasExplicitLqMarks, isLimitedQty } from "@/lib/cdc/limited.ts";
 import { HATCHES, hatchSpec, imdgAllowed, type HatchSpec } from "./george-ii.ts";
 import { parseStow, type StowPos } from "./stow.ts";
 
@@ -83,8 +84,10 @@ export function containersOnHatch(bucket: HatchBucket): ContainerSlot[] {
 
 export function hatchWarnings(bucket: HatchBucket): string[] {
   const out: string[] = [...bucket.spec.notes];
+  const cartonFallback = !hasExplicitLqMarks(bucket.lines.map((d) => d.line));
   for (const d of bucket.lines) {
     if (!d.stow) continue;
+    if (isLimitedQty(d.line, cartonFallback)) continue;
     const cls = d.line.hazClass;
     if (!imdgAllowed(bucket.spec, cls, d.stow.onDeck)) {
       out.push(

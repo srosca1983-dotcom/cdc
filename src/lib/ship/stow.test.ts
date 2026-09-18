@@ -52,6 +52,13 @@ describe("GEORGE II stowage", () => {
     assert.equal(stowFromRowText("UN 1263 14-08-84 CN"), "14-08-84");
   });
 
+  it("takes 20'/40' from the ISO size type, not even/odd bay", () => {
+    const twenty = parseStow("0180284", "22R1");
+    assert.equal(twenty?.fortyFoot, false);
+    const forty = parseStow("0170184", "45G1");
+    assert.equal(forty?.fortyFoot, true);
+  });
+
   it("keeps port-even, 00 centerline, starboard-odd looking forward", () => {
     assert.deepEqual(rowsPortToStbd([1, 2, 0, 12, 11]), [12, 2, 0, 1, 11]);
     assert.deepEqual(DECK_ROWS_H1, [10, 8, 6, 4, 2, 0, 1, 3, 5, 7, 9]);

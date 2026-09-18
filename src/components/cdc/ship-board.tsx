@@ -18,6 +18,7 @@ import {
 } from "@/lib/ship/segregation.ts";
 import { formatStow } from "@/lib/ship/stow.ts";
 import { formatKg } from "@/lib/cdc/quantity.ts";
+import { hasExplicitLqMarks, isLimitedQty } from "@/lib/cdc/limited.ts";
 import { hatchSlots } from "@/lib/baplie/overlay.ts";
 import { countBoxes, countReefers, motorsNote, reeferHeatIssues } from "@/lib/baplie/heat.ts";
 import type { BapliePlan } from "@/lib/baplie/types.ts";
@@ -38,8 +39,10 @@ export function ShipBoard({
   const [chem, setChem] = useState<{ un: string; cls: string; name: string } | null>(null);
 
   const lines = result?.lines ?? [];
+  const cartonFallback = !hasExplicitLqMarks(lines);
+  const lqOf = (line: LineResult) => isLimitedQty(line, cartonFallback);
   const buckets = useMemo(() => hatchBuckets(lines), [lines]);
-  const screen = useMemo(() => screenVoyage(lines), [lines]);
+  const screen = useMemo(() => screenVoyage(lines, baplie), [lines, baplie]);
   const heat = useMemo(() => reeferHeatIssues(lines, baplie), [lines, baplie]);
   const loose = useMemo(() => unstowed(lines), [lines]);
   const active = buckets.find((b) => b.spec.id === hatchId) ?? null;
@@ -65,6 +68,7 @@ export function ShipBoard({
         issues={[...issuesForKey(screen, slot.key), ...heat.filter((i) => i.containers.some((c) => c.toUpperCase() === slot.key))]}
         onBack={() => setSlotKey(null)}
         onChem={setChem}
+        cartonFallback={cartonFallback}
       />
     );
   }
@@ -77,6 +81,7 @@ export function ShipBoard({
         issues={[...(screen.byHatch.get(active.spec.id) ?? []), ...heat.filter((i) => i.hatch === active.spec.id)]}
         screen={screen}
         baplie={baplie}
+        cartonFallback={cartonFallback}
         onBack={() => {
           setHatchId(null);
           setSlotKey(null);
@@ -152,6 +157,12 @@ export function ShipBoard({
             {b.classes.length > 0 && (
               <p className="mt-1 font-mono text-xs text-ink">Class {b.classes.join(", ")}</p>
             )}
+            {b.lines.some((d) => lqOf(d.line)) && (
+              <p className="mt-1 text-xs text-muted">
+                {b.lines.filter((d) => lqOf(d.line)).length} Ltd Qty ·{" "}
+                {b.lines.filter((d) => !lqOf(d.line)).length} full DG
+              </p>
+            )}
             {worst && (
               <p className={cn("mt-1 text-xs", worst === "block" ? "text-cdc" : "text-review")}>
                 {issues.filter((i) => i.severity === "block").length
@@ -213,8 +224,9 @@ function IssueBanner({
   if (!all.length) {
     return (
       <div className="rounded-lg border border-ok/30 bg-ok-soft p-4 text-sm text-ok">
-        No CSM location blocks and no 176.83 segregation hits on the positions we could read.
-        Still check the IMDG for the commodity — this is the ship table, not every 7.2 footnote.
+        No CSM location block and no 176.83 segregation hits on the positions we could read.
+        Limited quantities (IMDG 3.4) are not segregated and are not under the hatch DoC — same as CargoMax.
+        Full DG is still checked against CSM 1.6 and 176.83. A UN is not segregated from its own subsidiary.
       </div>
     );
   }
@@ -413,6 +425,7 @@ function HatchView({
   issues,
   screen,
   baplie,
+  cartonFallback,
   onBack,
   onSlot,
 }: {
@@ -421,6 +434,7 @@ function HatchView({
   issues: StowIssue[];
   screen: VoyageScreen;
   baplie: BapliePlan | null;
+  cartonFallback: boolean;
   onBack: () => void;
   onSlot: (key: string) => void;
 }) {
@@ -471,7 +485,7 @@ function HatchView({
       </div>
       {baplie ? (
         <p className="text-xs text-muted">
-          Navy = live reefer (motors aft). Muted navy = NOR. Amber = DG from the DCM. Grey =
+          Navy = live reefer (motors aft). Muted navy = NOR. Green = Ltd Qty only. Ink = full DG. Red/amber = a real CSM or 176.83 hit. Grey =
           other cargo. Empty cells are empty.
         </p>
       ) : null}
@@ -485,6 +499,7 @@ function HatchView({
         cell={cell}
         onSlot={onSlot}
         screen={screen}
+        cartonFallback={cartonFallback}
       />
       {bucket.spec.holdRows > 0 && (
         <BayGrid
@@ -494,6 +509,7 @@ function HatchView({
           cell={cell}
           onSlot={onSlot}
           screen={screen}
+          cartonFallback={cartonFallback}
         />
       )}
 
@@ -533,6 +549,7 @@ function BayGrid({
   cell,
   onSlot,
   screen,
+  cartonFallback,
 }: {
   title: string;
   tiers: number[];
@@ -540,6 +557,7 @@ function BayGrid({
   cell: (tier: number, row: number) => ContainerSlot | undefined;
   onSlot: (key: string) => void;
   screen: VoyageScreen;
+  cartonFallback: boolean;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -564,6 +582,11 @@ function BayGrid({
               {rows.map((row) => {
                 const s = cell(tier, row);
                 const worst = s ? worstSeverity(issuesForKey(screen, s.key)) : null;
+                const lqOnly =
+                  !!s &&
+                  s.lines.length > 0 &&
+                  s.lines.every((d) => isLimitedQty(d.line, cartonFallback));
+                const fullDg = !!s && s.lines.some((d) => !isLimitedQty(d.line, cartonFallback));
                 return (
                   <td key={row} className="p-0.5">
                     {s ? (
@@ -576,15 +599,17 @@ function BayGrid({
                             ? "bg-cdc-soft text-ink"
                             : worst === "seg"
                               ? "bg-review-soft text-ink"
-                              : s.lines.length
-                                ? "bg-review-soft text-ink"
-                                : s.operating
-                                  ? "bg-navy text-primary-foreground"
-                                  : s.reefer
-                                    ? "bg-navy-2 text-primary-foreground"
-                                    : s.box
-                                      ? "bg-surface-2 text-ink"
-                                      : "bg-ok-soft text-ink",
+                              : fullDg
+                                ? "bg-navy/15 text-ink"
+                                : lqOnly
+                                  ? "bg-ok-soft text-ink"
+                                  : s.operating
+                                    ? "bg-navy text-primary-foreground"
+                                    : s.reefer
+                                      ? "bg-navy-2 text-primary-foreground"
+                                      : s.box
+                                        ? "bg-surface-2 text-ink"
+                                        : "bg-ok-soft text-ink",
                         )}
                       >
                         <span>{s.container.replace(/[A-Z]{4}/, (p) => p.slice(0, 4))}</span>
@@ -613,19 +638,58 @@ function BayGrid({
   );
 }
 
+function CargoLine({
+  d,
+  onChem,
+  lq,
+}: {
+  d: { line: LineResult };
+  onChem: (c: { un: string; cls: string; name: string }) => void;
+  lq: boolean;
+}) {
+  return (
+    <li className="rounded-lg border bg-surface p-4 shadow-border">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="font-medium">
+            UN {d.line.un} · {d.line.name || "Proper shipping name not parsed"}
+            {lq ? " · Ltd Qty" : ""}
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            Class {d.line.hazClass || "—"}
+            {d.line.input.packingGroup ? ` PG ${d.line.input.packingGroup}` : ""} ·{" "}
+            {d.line.packaging || "package"} · {formatKg(d.line.quantityKg)}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChem({ un: d.line.un, cls: d.line.hazClass, name: d.line.name })}
+          className="inline-flex h-10 items-center gap-2 rounded-md bg-navy px-3 text-sm text-primary-foreground"
+        >
+          <Flame className="size-4" /> Spill / fire
+        </button>
+      </div>
+    </li>
+  );
+}
+
 function ContainerView({
   slot,
   hatch,
   issues,
   onBack,
   onChem,
+  cartonFallback,
 }: {
   slot: ContainerSlot;
   hatch: HatchBucket;
   issues: StowIssue[];
   onBack: () => void;
   onChem: (c: { un: string; cls: string; name: string }) => void;
+  cartonFallback: boolean;
 }) {
+  const full = slot.lines.filter((d) => !isLimitedQty(d.line, cartonFallback));
+  const lq = slot.lines.filter((d) => isLimitedQty(d.line, cartonFallback));
   return (
     <div className="space-y-5">
       <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm text-accent">
@@ -655,34 +719,32 @@ function ContainerView({
           No CSM location block and no 176.83 hit against this box on the positions we have.
         </p>
       )}
-      <ul className="space-y-3">
-        {slot.lines.map((d) => (
-          <li key={d.line.input.rowIndex} className="rounded-lg border bg-surface p-4 shadow-border">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <p className="font-medium">
-                  UN {d.line.un} · {d.line.name || "Proper shipping name not parsed"}
-                </p>
-                <p className="mt-1 text-sm text-muted">
-                  Class {d.line.hazClass || "—"}
-                  {d.line.input.packingGroup ? ` PG ${d.line.input.packingGroup}` : ""} ·{" "}
-                  {d.line.packaging || "package"} · {formatKg(d.line.quantityKg)}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() =>
-                  onChem({ un: d.line.un, cls: d.line.hazClass, name: d.line.name })
-                }
-                className="inline-flex h-10 items-center gap-2 rounded-md bg-navy px-3 text-sm text-primary-foreground"
-              >
-                <Flame className="size-4" /> Spill / fire
-              </button>
-            </div>
-          </li>
-        ))}
-        {!slot.lines.length &&
-          slot.box?.dg.map((dg, i) => (
+      {full.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium">Dangerous goods · {full.length}</h3>
+          <ul className="mt-2 space-y-3">
+            {full.map((d) => (
+              <CargoLine key={d.line.input.rowIndex} d={d} onChem={onChem} lq={false} />
+            ))}
+          </ul>
+        </div>
+      )}
+      {lq.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium">Limited quantity · {lq.length}</h3>
+          <p className="mt-1 text-xs text-muted">
+            IMDG 3.4.4.2 — not segregated from other boxes, and not under the hatch class table.
+          </p>
+          <ul className="mt-2 space-y-3">
+            {lq.map((d) => (
+              <CargoLine key={d.line.input.rowIndex} d={d} onChem={onChem} lq />
+            ))}
+          </ul>
+        </div>
+      )}
+      {!slot.lines.length && slot.box?.dg.length ? (
+        <ul className="space-y-3">
+          {slot.box.dg.map((dg, i) => (
             <li key={`${dg.un}-${i}`} className="rounded-lg border bg-surface p-4 shadow-border">
               <p className="font-medium">
                 UN {dg.un || "—"} · {dg.name || "From BAPLIE DGS"}
@@ -701,7 +763,8 @@ function ContainerView({
               ) : null}
             </li>
           ))}
-      </ul>
+        </ul>
+      ) : null}
       {!slot.lines.length && !slot.box?.dg.length && slot.box && (
         <p className="text-sm text-muted">
           Other cargo from the BAPLIE. No dangerous goods on the DCM for this box.

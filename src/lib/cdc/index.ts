@@ -11,3 +11,4 @@ export * from "./imdg.ts";
 export * from "./scan.ts";
 export * from "./history.ts";
 export * from "./compare.ts";
+export * from "./limited.ts";

@@ -4,11 +4,15 @@
  * - 49 CFR 176.83(b) as printed in CSM Rev. 15 (how far apart classes must be)
  *
  * Closed freight containers, container-ship distances (IMDG 7.4.2 / 176.83(f)).
+ * Limited / excepted quantity: IMDG 3.4.4 — not under the hatch DoC, and 7.2.4
+ * does not apply to LQ packages or to CTUs of only LQ (CargoMax).
  * Not a substitute for the IMDG Code, 49 CFR 176, or the Master’s stowage plan.
  */
 
 import type { LineResult } from "../cdc/types.ts";
-import { HATCHES, hatchSpec, type HatchSpec } from "./george-ii.ts";
+import { hasExplicitLqMarks, isLimitedQty } from "../cdc/limited.ts";
+import type { BapliePlan } from "../baplie/types.ts";
+import { HATCHES, hatchSpec, athwartGap, isCasingCell, type HatchSpec } from "./george-ii.ts";
 import { parseStow, type StowPos } from "./stow.ts";
 
 export type IssueSeverity = "block" | "seg" | "watch";
@@ -152,12 +156,20 @@ interface Box {
   container: string;
   stow: StowPos | null;
   classes: string[];
+  /** Classes from non-LQ lines only — 176.83 / CSM DoC. Includes subsidiaries for between-box. */
+  fullClasses: string[];
+  /** Per full-DG line class lists — never compare a UN to its own subsidiary. */
+  fullLineGroups: string[][];
   uns: string[];
   names: string[];
   lines: LineResult[];
+  /** Every DG line in the box is limited / excepted quantity. */
+  allLq: boolean;
 }
 
 function boxesFrom(lines: LineResult[]): Box[] {
+  const cartonFallback = !hasExplicitLqMarks(lines);
+  const lq = (line: LineResult) => isLimitedQty(line, cartonFallback);
   const map = new Map<string, Box>();
   for (const line of lines) {
     if (!line.un) continue;
@@ -168,18 +180,32 @@ function boxesFrom(lines: LineResult[]): Box[] {
       container: line.input.container || "No container no.",
       stow,
       classes: [],
+      fullClasses: [],
+      fullLineGroups: [],
       uns: [],
       names: [],
       lines: [],
+      allLq: true,
     };
     cur.lines.push(line);
     if (!cur.stow && stow) cur.stow = stow;
-    for (const g of classesOnLine(line)) {
+    const groups = classesOnLine(line);
+    for (const g of groups) {
       if (!cur.classes.includes(g)) cur.classes.push(g);
+    }
+    if (!lq(line)) {
+      cur.allLq = false;
+      if (groups.length) cur.fullLineGroups.push(groups);
+      for (const g of groups) {
+        if (!cur.fullClasses.includes(g)) cur.fullClasses.push(g);
+      }
     }
     if (!cur.uns.includes(line.un)) cur.uns.push(line.un);
     if (line.name && !cur.names.includes(line.name)) cur.names.push(line.name);
     map.set(cn, cur);
+  }
+  for (const b of map.values()) {
+    if (!b.lines.length) b.allLq = false;
   }
   return [...map.values()];
 }
@@ -194,12 +220,14 @@ function hold2Forbidden(cls: string): string | null {
   return null;
 }
 
-function locationIssues(box: Box, spec: HatchSpec): StowIssue[] {
+function locationIssues(box: Box, spec: HatchSpec, cartonFallback: boolean): StowIssue[] {
   if (!box.stow) return [];
+  // IMDG 3.4.4 / CargoMax: limited quantities are not under the ship's class-by-hold DoC.
+  if (box.allLq) return [];
   const issues: StowIssue[] = [];
   const onDeck = box.stow.onDeck;
   const label = box.container;
-  const cls = box.classes.join("/");
+  const cls = (box.fullClasses.length ? box.fullClasses : box.classes).join("/");
   const base = {
     hatch: spec.id,
     containers: [label],
@@ -229,21 +257,31 @@ function locationIssues(box: Box, spec: HatchSpec): StowIssue[] {
   }
 
   if (!onDeck && spec.imdgHold) {
-    for (const line of box.lines) {
-      const why = hold2Forbidden(line.hazClass);
+    const checks =
+      box.lines.length > 0
+        ? box.lines
+            .filter((line) => !isLimitedQty(line, cartonFallback))
+            .map((line) => ({
+              un: line.un,
+              cls: line.hazClass,
+              sub: line.input.subsidiary,
+            }))
+        : box.fullClasses.map((c, i) => ({ un: box.uns[i] || box.uns[0] || "", cls: c, sub: "" }));
+    for (const line of checks) {
+      const why = hold2Forbidden(line.cls);
       if (why) {
         issues.push({
-          id: `loc-h2-${box.key}-${line.un}`,
+          id: `loc-h2-${box.key}-${line.un || line.cls}`,
           severity: "block",
           ...base,
-          uns: [line.un],
-          title: `${label} UN ${line.un} should not be in Hold 2`,
+          uns: line.un ? [line.un] : box.uns,
+          title: `${label} UN ${line.un || line.cls} should not be in Hold 2`,
           detail: why,
           rule: "CSM 1.6 loading table — Hold 2 (Hatches 3 & 4)",
         });
       }
-      const sub = classGroup(line.input.subsidiary);
-      if (classGroup(line.hazClass) === "2.3" && sub === "2.1") {
+      const sub = classGroup(line.sub);
+      if (classGroup(line.cls) === "2.3" && sub === "2.1") {
         issues.push({
           id: `loc-23fl-${box.key}`,
           severity: "block",
@@ -253,7 +291,7 @@ function locationIssues(box: Box, spec: HatchSpec): StowIssue[] {
           rule: "CSM 1.6 note 20",
         });
       }
-      if (classGroup(line.hazClass) === "5.2") {
+      if (classGroup(line.cls) === "5.2") {
         issues.push({
           id: `loc-52-${box.key}`,
           severity: "block",
@@ -266,13 +304,13 @@ function locationIssues(box: Box, spec: HatchSpec): StowIssue[] {
     }
   }
 
-  if (spec.id === 10 && box.stow) {
+  if (spec.id === 10 && box.stow && isCasingCell(10, box.stow.row)) {
     issues.push({
       id: `watch-casing-${box.key}`,
       severity: "watch",
       ...base,
       title: `${label} is against the new engine casing`,
-      detail: "Hatch 10 cells next to the casing should be void unless the cargo must go here. A puncture takes the ship off hire.",
+      detail: "Hatch 10 inboard cells next to the casing should be void unless the cargo must go here. A puncture takes the ship off hire. Outboard cells on this cover are not this watch.",
       rule: "Loading precautions — Hatch 10 casing",
     });
   }
@@ -286,7 +324,7 @@ function pairSatisfied(code: SegCode, a: Box, b: Box): boolean {
   if (!a.stow || !b.stow) return true;
   const sameHatch = a.stow.hatch === b.stow.hatch;
   const sameLevel = a.stow.onDeck === b.stow.onDeck;
-  const rowGap = Math.abs(a.stow.row - b.stow.row);
+  const cells = sameHatch && sameLevel ? athwartGap(a.stow.hatch, a.stow.onDeck, a.stow.row, b.stow.row) : 99;
   const sameRow = a.stow.row === b.stow.row;
   const hDiff = Math.abs(a.stow.hatch - b.stow.hatch);
   const holdDiff = Math.abs(holdId(a.stow.hatch) - holdId(b.stow.hatch));
@@ -294,7 +332,7 @@ function pairSatisfied(code: SegCode, a: Box, b: Box): boolean {
   if (code === "1") return true;
   if (code === "*") return false;
   if (code === "2") {
-    if (sameHatch && sameLevel && (rowGap < 2 || sameRow)) return false;
+    if (sameHatch && sameLevel && (cells < 2 || sameRow)) return false;
     return true;
   }
   if (code === "3") {
@@ -310,20 +348,21 @@ function pairSatisfied(code: SegCode, a: Box, b: Box): boolean {
 }
 
 function pairIssue(a: Box, b: Box): StowIssue | null {
-  if (!a.classes.length || !b.classes.length) return null;
-
+  // IMDG 3.4.4.2: 7.2.4 / 176.83 does not apply to LQ packages or to CTUs of only LQ.
   if (a.key === b.key) {
-    if (a.classes.length < 2) return null;
+    const groups = a.fullLineGroups;
+    if (groups.length < 2) return null;
     let worst: { code: SegCode; x: string; y: string } | null = null;
-    for (let i = 0; i < a.classes.length; i++) {
-      for (let j = i + 1; j < a.classes.length; j++) {
-        const code = segregationCode(a.classes[i], a.classes[j]);
-        if (!worst || CODE_RANK[code] > CODE_RANK[worst.code]) {
-          worst = { code, x: a.classes[i], y: a.classes[j] };
+    for (let i = 0; i < groups.length; i++) {
+      for (let j = i + 1; j < groups.length; j++) {
+        const hit = worstCode(groups[i], groups[j]);
+        if (!worst || CODE_RANK[hit.code] > CODE_RANK[worst.code]) {
+          worst = { code: hit.code, x: hit.a, y: hit.b };
         }
       }
     }
-    if (!worst || CODE_RANK[worst.code] === 0) return null;
+    // Away from (1) may share a closed CTU. Do not segregate a UN from its own subsidiary.
+    if (!worst || CODE_RANK[worst.code] <= 1) return null;
     return {
       id: `seg-same-${a.key}-${worst.x}-${worst.y}`,
       severity: "seg",
@@ -331,13 +370,17 @@ function pairIssue(a: Box, b: Box): StowIssue | null {
       containers: [a.container],
       uns: a.uns,
       title: `${a.container} has incompatible classes in the same box`,
-      detail: `Class ${worst.x} and class ${worst.y} require ${CODE_LABEL[worst.code]}. They cannot share a container.`,
+      detail: `Class ${worst.x} and class ${worst.y} require ${CODE_LABEL[worst.code]}. Limited quantity lines in this box are ignored (IMDG 3.4.4.2). Full DG cannot share a container at that code.`,
       rule: `49 CFR 176.83(b) ${worst.code}`,
     };
   }
 
-  const { code, a: ca, b: cb } = worstCode(a.classes, b.classes);
-  if (CODE_RANK[code] === 0) return null;
+  const classesA = a.fullClasses;
+  const classesB = b.fullClasses;
+  if (!classesA.length || !classesB.length) return null;
+
+  const { code, a: ca, b: cb } = worstCode(classesA, classesB);
+  if (CODE_RANK[code] <= 1) return null;
   if (pairSatisfied(code, a, b)) return null;
   const hatch = a.stow?.hatch ?? b.stow?.hatch ?? 0;
   const where =
@@ -365,12 +408,57 @@ export interface VoyageScreen {
   byContainer: Map<string, StowIssue[]>;
 }
 
-export function screenVoyage(lines: LineResult[]): VoyageScreen {
-  const boxes = boxesFrom(lines);
+function mergeBaplie(boxes: Box[], plan: BapliePlan | null): Box[] {
+  if (!plan) return boxes;
+  const map = new Map(boxes.map((b) => [b.key, b]));
+  for (const p of plan.boxes) {
+    if (!p.dg.length) continue;
+    const key = p.container.toUpperCase();
+    const cur = map.get(key) ?? {
+      key,
+      container: p.container,
+      stow: p.stow,
+      classes: [],
+      fullClasses: [],
+      fullLineGroups: [],
+      uns: [],
+      names: [],
+      lines: [],
+      allLq: false,
+    };
+    if (!cur.stow && p.stow) cur.stow = p.stow;
+    const dcmOwnsLq = cur.lines.length > 0;
+    for (const dg of p.dg) {
+      const g = classGroup(dg.cls);
+      if (g && !cur.classes.includes(g)) cur.classes.push(g);
+      if (dg.subsidiary) {
+        const sg = classGroup(dg.subsidiary);
+        if (sg && !cur.classes.includes(sg)) cur.classes.push(sg);
+      }
+      if (!dcmOwnsLq) {
+        const group = [g, dg.subsidiary ? classGroup(dg.subsidiary) : null].filter(Boolean) as string[];
+        if (g && !cur.fullClasses.includes(g)) cur.fullClasses.push(g);
+        if (group.length) cur.fullLineGroups.push(group);
+        if (dg.subsidiary) {
+          const sg = classGroup(dg.subsidiary);
+          if (sg && !cur.fullClasses.includes(sg)) cur.fullClasses.push(sg);
+        }
+      }
+      if (dg.un && !cur.uns.includes(dg.un)) cur.uns.push(dg.un);
+      if (dg.name && !cur.names.includes(dg.name)) cur.names.push(dg.name);
+    }
+    map.set(key, cur);
+  }
+  return [...map.values()];
+}
+
+export function screenVoyage(lines: LineResult[], plan: BapliePlan | null = null): VoyageScreen {
+  const cartonFallback = !hasExplicitLqMarks(lines);
+  const boxes = mergeBaplie(boxesFrom(lines), plan);
   const issues: StowIssue[] = [];
   for (const box of boxes) {
     const spec = box.stow ? hatchSpec(box.stow.hatch) : undefined;
-    if (spec) issues.push(...locationIssues(box, spec));
+    if (spec) issues.push(...locationIssues(box, spec, cartonFallback));
   }
   for (const box of boxes) {
     const inner = pairIssue(box, box);

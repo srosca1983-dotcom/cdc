@@ -3,8 +3,10 @@ import type { StowPos } from "../ship/stow.ts";
 export interface BaplieDg {
   un: string;
   cls: string;
+  subsidiary?: string;
   name: string;
   packingGroup?: string;
+  flashpoint?: string;
 }
 
 export interface BaplieBox {
@@ -12,15 +14,19 @@ export interface BaplieBox {
   iso?: string;
   stowRaw?: string;
   stow: StowPos | null;
+  /** Container gross (MEA WT/VGM). Not DG net — do not run CDC on this. */
   weightKg?: number;
   pol?: string;
   pod?: string;
+  transship?: string;
+  finalPod?: string;
   full?: boolean;
   reefer: boolean;
   operating: boolean;
   tempC?: number | null;
-  /** GEORGE II: aft everywhere except bay 6 or 22 below. */
+  /** GEORGE II default aft; HAN+RFF overrides to forward. */
   motors: "aft" | "fwd";
+  han?: string;
   dg: BaplieDg[];
   booking?: string;
 }

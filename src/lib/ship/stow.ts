@@ -37,7 +37,15 @@ function partsFrom(raw: string): { bay: number; row: number; tier: number } | nu
   return null;
 }
 
-export function parseStow(raw: string | undefined | null): StowPos | null {
+export function isoFortyFoot(iso?: string | null): boolean | undefined {
+  if (!iso) return undefined;
+  const c = iso.trim().toUpperCase()[0];
+  if (c === "2") return false;
+  if (c === "4" || c === "L" || c === "M" || c === "A") return true;
+  return undefined;
+}
+
+export function parseStow(raw: string | undefined | null, iso?: string | null): StowPos | null {
   if (!raw) return null;
   const p = partsFrom(raw);
   if (!p) return null;
@@ -47,6 +55,7 @@ export function parseStow(raw: string | undefined | null): StowPos | null {
   if (tier === 0) return null;
   const hatch = hatchFromBay(bay);
   if (!hatch) return null;
+  const fromIso = isoFortyFoot(iso);
   return {
     raw: String(raw).trim(),
     bay,
@@ -54,7 +63,7 @@ export function parseStow(raw: string | undefined | null): StowPos | null {
     tier,
     onDeck: tier >= 80,
     hatch,
-    fortyFoot: bay % 2 === 0,
+    fortyFoot: fromIso ?? bay % 2 === 0,
   };
 }
 

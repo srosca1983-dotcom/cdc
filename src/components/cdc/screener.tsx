@@ -37,6 +37,7 @@ import { DISCLAIMER, ENOAD_BLURB, RULE_CARDS } from "@/lib/cdc/rules-text.ts";
 import { PASHA_SAMPLE, WORKED_SAMPLE } from "@/lib/cdc/sample.ts";
 import { categoryScan, type ScanItem } from "@/lib/cdc/scan.ts";
 import { loadCargo, loadVoyageLog, logLabel, pushVoyageLog, saveCargo, voyageBits, type VoyageLog } from "@/lib/cdc/history.ts";
+import { isLimitedQty, hasExplicitLqMarks } from "@/lib/cdc/limited.ts";
 import { CONTAINER_OPTIONS } from "@/lib/cdc/types.ts";
 import type { EvalResult, LineResult, ParseResult, VoyageInfo } from "@/lib/cdc/types.ts";
 import { cn } from "@/lib/utils";
@@ -48,7 +49,7 @@ import { loadBaplie, saveBaplie } from "@/lib/baplie/store.ts";
 import type { BapliePlan } from "@/lib/baplie/types.ts";
 
 type Tab = "manifest" | "ship" | "response" | "lookup" | "rules";
-type Filter = "flagged" | "all" | "CDC" | "REVIEW" | "NOT_CDC";
+type Filter = "flagged" | "all" | "CDC" | "REVIEW" | "NOT_CDC" | "full" | "lq";
 
 export function Screener() {
   const [tab, setTab] = useState<Tab>("manifest");
@@ -286,7 +287,7 @@ function ManifestPanel({
         continue;
       }
       if (/\.txt$/i.test(f.name)) {
-        const head = (await f.text()).slice(0, 4000);
+        const head = (await f.text()).slice(0, 65536);
         if (looksLikeBaplie(head)) {
           baplieFiles.push(f);
           continue;
@@ -368,15 +369,21 @@ function ManifestPanel({
   }
 
   const flaggedCount = result ? result.cdc + result.residue + result.review : 0;
+  const cartonFallback = result ? !hasExplicitLqMarks(result.lines) : false;
+  const lqCount = result ? result.lines.filter((l) => isLimitedQty(l, cartonFallback)).length : 0;
+  const fullCount = result ? result.total - lqCount : 0;
 
   const filtered = useMemo(() => {
     if (!result) return [];
     const needle = query.trim().toLowerCase().replace(/^un\s*/, "");
-    return result.lines.filter((l) => {
+    return result.lines
+      .filter((l) => {
       if (filter === "flagged" && l.verdict === "NOT_CDC") return false;
       if (filter === "CDC" && l.verdict !== "CDC" && l.verdict !== "CDC_RESIDUE") return false;
       if (filter === "REVIEW" && l.verdict !== "REVIEW") return false;
       if (filter === "NOT_CDC" && l.verdict !== "NOT_CDC") return false;
+      if (filter === "full" && isLimitedQty(l, cartonFallback)) return false;
+      if (filter === "lq" && !isLimitedQty(l, cartonFallback)) return false;
       if (!needle) return true;
       const hay = [
         l.un,
@@ -386,13 +393,22 @@ function ManifestPanel({
         l.input.container,
         l.input.booking,
         l.input.technicalName,
+        isLimitedQty(l, cartonFallback) ? "ltd qty limited" : "full dg",
       ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return hay.includes(needle);
-    });
-  }, [result, filter, query]);
+    })
+      .sort((a, b) => {
+        const lq = Number(isLimitedQty(a, cartonFallback)) - Number(isLimitedQty(b, cartonFallback));
+        if (lq) return lq;
+        const ca = (a.input.container || "").toUpperCase();
+        const cb = (b.input.container || "").toUpperCase();
+        if (ca !== cb) return ca.localeCompare(cb);
+        return a.un.localeCompare(b.un);
+      });
+  }, [result, filter, query, cartonFallback]);
 
   function onDrop(e: DragEvent) {
     e.preventDefault();
@@ -598,7 +614,7 @@ function ManifestPanel({
 
       {result && parsed ? (
         <>
-          <VoyageBanner parsed={parsed} />
+          <VoyageBanner parsed={parsed} lqCount={lqCount} fullCount={fullCount} />
           {compare ? <CompareCard compare={compare} /> : null}
           <Stats result={result} />
           <CategoryCheck result={result} />
@@ -614,6 +630,8 @@ function ManifestPanel({
                       [
                         ["flagged", `Flagged ${flaggedCount}`],
                         ["all", `All ${result.total}`],
+                        ["full", `Full DG ${fullCount}`],
+                        ["lq", `Ltd Qty ${lqCount}`],
                         ["CDC", `CDC ${result.cdc + result.residue}`],
                         ["REVIEW", `Review ${result.review}`],
                         ["NOT_CDC", `Not CDC ${result.notCdc}`],
@@ -633,7 +651,7 @@ function ManifestPanel({
                     ))}
                   </div>
                 </div>
-                {filter === "all" || query || flaggedCount > 0 ? (
+                {filter === "all" || filter === "full" || filter === "lq" || query || flaggedCount > 0 ? (
                   <div className="relative">
                     <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-subtle" />
                     <Input
@@ -652,6 +670,7 @@ function ManifestPanel({
                 query={query}
                 flaggedCount={flaggedCount}
                 total={result.total}
+                cartonFallback={cartonFallback}
                 onShowAll={() => setFilter("all")}
               />
             </section>
@@ -693,7 +712,15 @@ function ManifestPanel({
   );
 }
 
-function VoyageBanner({ parsed }: { parsed: ParseResult }) {
+function VoyageBanner({
+  parsed,
+  lqCount,
+  fullCount,
+}: {
+  parsed: ParseResult;
+  lqCount: number;
+  fullCount: number;
+}) {
   const v = parsed.voyage;
   const bits = [
     v.vessel,
@@ -701,7 +728,9 @@ function VoyageBanner({ parsed }: { parsed: ParseResult }) {
     v.pol && v.pod ? `${v.pol} → ${v.pod}` : v.pol || v.pod,
     parsed.sourceName,
     `${parsed.lines.length} DG lines`,
-  ].filter(Boolean);
+    fullCount ? `${fullCount} full DG` : null,
+    lqCount ? `${lqCount} Ltd Qty` : "",
+  ].filter((b) => b);
   if (bits.length === 0) return null;
   return (
     <section className="rounded-xl bg-navy px-4 py-3 text-primary-foreground sm:px-5">
@@ -1072,6 +1101,7 @@ function ResultsTable({
   query,
   flaggedCount,
   total,
+  cartonFallback,
   onShowAll,
 }: {
   rows: LineResult[];
@@ -1079,6 +1109,7 @@ function ResultsTable({
   query: string;
   flaggedCount: number;
   total: number;
+  cartonFallback: boolean;
   onShowAll: () => void;
 }) {
   if (rows.length === 0) {
@@ -1132,7 +1163,7 @@ function ResultsTable({
                   Class {row.hazClass || "—"}
                   {row.input.subsidiary ? ` (${row.input.subsidiary})` : ""}
                   {row.pih ? " · PIH" : ""}
-                  {row.input.limitedQty ? " · Ltd qty" : ""}
+                  {isLimitedQty(row, cartonFallback) ? " · Ltd qty" : ""}
                   {row.input.container ? ` · ${row.input.container}` : ""}
                 </p>
               </td>

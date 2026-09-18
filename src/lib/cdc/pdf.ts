@@ -1,3 +1,4 @@
+import { stowFromRowText } from "../ship/stow.ts";
 import { classFromToken, normalizeUn } from "./imdg.ts";
 import { coalesceVoyage } from "./parse.ts";
 import { looksLikeExp023, parseExp023Text } from "./exp023.ts";
@@ -94,6 +95,7 @@ function lineFromUn(unTok: PdfToken, pageTokens: PdfToken[], rowIndex: number): 
   const booking = [...above, ...same].find((t) => t.x < 120 && /^\d{7,12}$/.test(t.str))?.str;
   const pg = above.find((t) => t.x >= 330 && t.x <= 420 && PG_TOKEN.test(t.str))?.str ?? "";
   const limitedQty = cluster.some((t) => /LTD\s*QTY|LIMITED QUANTIT/i.test(t.str));
+  const stowLoc = stowFromRowText(cluster.map((t) => t.str).join(" "));
 
   return {
     rowIndex,
@@ -110,6 +112,7 @@ function lineFromUn(unTok: PdfToken, pageTokens: PdfToken[], rowIndex: number): 
     booking,
     technicalName: techTok?.str,
     limitedQty: limitedQty || undefined,
+    stowLoc,
   };
 }
 

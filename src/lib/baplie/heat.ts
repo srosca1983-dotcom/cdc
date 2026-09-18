@@ -1,9 +1,11 @@
 import type { LineResult } from "../cdc/types.ts";
+import { hasExplicitLqMarks, isLimitedQty } from "../cdc/limited.ts";
+import { athwartGap } from "../ship/george-ii.ts";
 import { parseStow, type StowPos } from "../ship/stow.ts";
 import type { StowIssue } from "../ship/segregation.ts";
 import type { BaplieBox, BapliePlan } from "./types.ts";
 
-/** Conversion sheet: all reefers face aft, except bay 6 or 22 below (motors fwd). */
+/** Conversion sheet: all reefers face aft, except bay 6 or 22 below (motors fwd). HAN+RFF overrides. */
 export function reeferMotors(stow: StowPos): "aft" | "fwd" {
   if (!stow.onDeck && (stow.bay === 6 || stow.bay === 22)) return "fwd";
   return "aft";
@@ -20,13 +22,12 @@ export function heatSensitive(cls: string, un?: string): boolean {
   return false;
 }
 
-function beside(a: StowPos, b: StowPos): boolean {
+export function beside(a: StowPos, b: StowPos): boolean {
   if (a.onDeck !== b.onDeck) return false;
   if (a.hatch !== b.hatch) return false;
-  const rowGap = Math.abs(a.row - b.row);
   const tierGap = Math.abs(a.tier - b.tier);
   if (a.row === b.row && tierGap > 0 && tierGap <= 2) return true;
-  if (a.tier === b.tier && rowGap <= 1) return true;
+  if (a.tier === b.tier && athwartGap(a.hatch, a.onDeck, a.row, b.row) <= 1) return true;
   return false;
 }
 
@@ -47,6 +48,7 @@ interface DgSpot {
 }
 
 function dgSpots(lines: LineResult[], plan: BapliePlan | null): DgSpot[] {
+  const cartonFallback = !hasExplicitLqMarks(lines);
   const out: DgSpot[] = [];
   const seen = new Set<string>();
   for (const line of lines) {
@@ -56,6 +58,7 @@ function dgSpots(lines: LineResult[], plan: BapliePlan | null): DgSpot[] {
     const key = `${container}|${line.un}|${stow.bay}-${stow.row}-${stow.tier}`;
     if (seen.has(key)) continue;
     seen.add(key);
+    if (isLimitedQty(line, cartonFallback)) continue;
     out.push({ container, stow, cls: line.hazClass, un: line.un, name: line.name });
   }
   if (plan) {
@@ -133,8 +136,11 @@ export function countBoxes(plan: BapliePlan | null, hatch?: number): number {
 
 export function motorsNote(box: BaplieBox): string {
   if (!box.reefer) return "";
+  if (box.han && /^RFF/i.test(box.han)) {
+    return "Motor faces FORWARD (HAN+RFF on the BAPLIE).";
+  }
   if (box.motors === "fwd") {
     return "Motor faces FORWARD — bay 6 or 22 below is the conversion-sheet exception.";
   }
-  return "Motor faces AFT (whole vessel except bay 6 / 22 below).";
+  return "Motor faces AFT (whole vessel except bay 6 / 22 below, unless HAN+RFF).";
 }

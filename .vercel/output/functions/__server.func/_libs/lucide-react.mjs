@@ -1,4 +1,4 @@
-import { i as __toESM } from "../_runtime.mjs";
+import { o as __toESM } from "../_runtime.mjs";
 import { n as require_react } from "./@radix-ui/react-compose-refs+[...].mjs";
 //#region node_modules/lucide-react/dist/esm/shared/src/utils.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
@@ -98,6 +98,19 @@ var Anchor = createLucideIcon("anchor", [
 		key: "rqqgnr"
 	}]
 ]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
+var ArrowLeft = createLucideIcon("arrow-left", [["path", {
+	d: "m12 19-7-7 7-7",
+	key: "1l729n"
+}], ["path", {
+	d: "M19 12H5",
+	key: "x3x0zl"
+}]]);
 /**
 * @license lucide-react v0.510.0 - ISC
 *
@@ -250,6 +263,16 @@ var FileText = createLucideIcon("file-text", [
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var Flame = createLucideIcon("flame", [["path", {
+	d: "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z",
+	key: "96xj49"
+}]]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var GitCompare = createLucideIcon("git-compare", [
 	["circle", {
 		cx: "18",
@@ -378,4 +401,4 @@ var Upload = createLucideIcon("upload", [
 	}]
 ]);
 //#endregion
-export { Mail as a, FileText as c, Download as d, ClipboardCopy as f, Search as i, FileSpreadsheet as l, Anchor as m, TriangleAlert as n, History as o, Check as p, Shield as r, GitCompare as s, Upload as t, Eraser as u };
+export { Mail as a, Flame as c, Eraser as d, Download as f, Anchor as g, ArrowLeft as h, Search as i, FileText as l, Check as m, TriangleAlert as n, History as o, ClipboardCopy as p, Shield as r, GitCompare as s, Upload as t, FileSpreadsheet as u };

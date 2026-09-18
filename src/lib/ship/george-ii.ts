@@ -27,6 +27,8 @@ export interface HatchSpec {
   imdgOnDeck: boolean;
   /** Below-deck IMDG only in Cargo Hold No. 2 (Hatches 3 & 4). */
   imdgHold: boolean;
+  /** Hatch 10: inboard cells against the engine casing. */
+  casingRows?: number[];
   notes: string[];
 }
 
@@ -36,6 +38,8 @@ export const DECK_ROWS_12 = [12, 10, 8, 6, 4, 2, 1, 3, 5, 7, 9, 11];
 export const DECK_ROWS_H1 = [10, 8, 6, 4, 2, 0, 1, 3, 5, 7, 9];
 /** Bay 38 missing the middle section. */
 export const DECK_ROWS_H10 = [12, 10, 8, 6, 4, 3, 5, 7, 9, 11];
+/** Inboard cells next to the Hatch 10 engine casing (not the whole cover). */
+export const CASING_ROWS_H10 = [0, 1, 2, 3, 4];
 /** Every hold: 7 across with CL 0. */
 export const HOLD_ROWS_7 = [6, 4, 2, 0, 1, 3, 5];
 
@@ -185,6 +189,7 @@ export const HATCHES: HatchSpec[] = [
     onDeckTiers: 3,
     imdgOnDeck: false,
     imdgHold: false,
+    casingRows: CASING_ROWS_H10,
     notes: [
       "Bays 37-38-39. Hold 6 deck access only. Bay 38 is missing the middle section.",
       "Cells next to the new engine casing — void unless cargo must go here.",
@@ -235,6 +240,24 @@ export function deckRowsFor(spec: HatchSpec, occupied: number[] = []): number[] 
 export function holdRowsFor(spec: HatchSpec, occupied: number[] = []): number[] {
   if (!spec.holdRowIds.length && !occupied.length) return [];
   return rowsPortToStbd([...spec.holdRowIds, ...occupied]);
+}
+
+/** How many cells apart on the hatch line (port→stbd). 0 = same cell, 1 = neighbors. */
+export function athwartGap(hatchId: number, onDeck: boolean, rowA: number, rowB: number): number {
+  if (rowA === rowB) return 0;
+  const spec = hatchSpec(hatchId);
+  const base = spec ? (onDeck ? spec.deckRowIds : spec.holdRowIds) : [];
+  const line = rowsPortToStbd([...base, rowA, rowB]);
+  const ia = line.indexOf(rowA);
+  const ib = line.indexOf(rowB);
+  if (ia < 0 || ib < 0) return Math.abs(rowA - rowB);
+  return Math.abs(ia - ib);
+}
+
+export function isCasingCell(hatchId: number, row: number): boolean {
+  const spec = hatchSpec(hatchId);
+  if (!spec?.casingRows?.length) return false;
+  return spec.casingRows.includes(row);
 }
 
 /** CSM 1.6 — class allowed on deck (except 8/9/10/12) vs Hold 2. */

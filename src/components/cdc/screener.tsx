@@ -5,8 +5,6 @@ import {
   ClipboardCopy,
   Download,
   Eraser,
-  FileSpreadsheet,
-  FileText,
   GitCompare,
   History,
   Mail,
@@ -34,7 +32,6 @@ import { compareManifests, kindLabel, mergeStowFromAll, selectPreferred, type Ma
 import { packFormLabel } from "@/lib/cdc/packaging.ts";
 import { formatKg } from "@/lib/cdc/quantity.ts";
 import { DISCLAIMER, ENOAD_BLURB, RULE_CARDS } from "@/lib/cdc/rules-text.ts";
-import { PASHA_SAMPLE, WORKED_SAMPLE } from "@/lib/cdc/sample.ts";
 import { categoryScan, type ScanItem } from "@/lib/cdc/scan.ts";
 import { loadCargo, loadVoyageLog, logLabel, pushVoyageLog, saveCargo, voyageBits, type VoyageLog } from "@/lib/cdc/history.ts";
 import { isLimitedQty } from "@/lib/cdc/limited.ts";
@@ -45,7 +42,6 @@ import { ShipBoard, ChemicalView } from "@/components/cdc/ship-board.tsx";
 import { VoyageRisksView } from "@/components/cdc/voyage-risks.tsx";
 import { sheetFor, sheetSections } from "@/lib/erg/guides.ts";
 import { isBaplieFilename, looksLikeBaplie, parseBaplie } from "@/lib/baplie/parse.ts";
-import { SAMPLE_BAPLIE } from "@/lib/baplie/sample.ts";
 import { loadBaplie, saveBaplie } from "@/lib/baplie/store.ts";
 import type { BapliePlan } from "@/lib/baplie/types.ts";
 import { BaplieSummary } from "@/components/cdc/baplie-summary.tsx";
@@ -355,12 +351,6 @@ function ManifestPanel({
     }
   }
 
-  function loadSample(text: string, name: string) {
-    const next = parseManifest(text, "lb");
-    next.sourceName = name;
-    applyParsed(next);
-  }
-
   const flaggedCount = result ? result.cdc + result.residue + result.review : 0;
   const lqCount = result ? result.lines.filter((l) => isLimitedQty(l)).length : 0;
   const fullCount = result ? result.total - lqCount : 0;
@@ -474,14 +464,6 @@ function ManifestPanel({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => loadSample(PASHA_SAMPLE, "pasha-style-sample.tsv")}>
-              <FileSpreadsheet />
-              Pasha-style sample
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => loadSample(WORKED_SAMPLE, "worked-cdc-example.tsv")}>
-              <FileText />
-              Example with CDC
-            </Button>
             <Button variant="ghost" size="sm" onClick={() => setShowPaste((v) => !v)}>
               Paste instead
             </Button>
@@ -563,41 +545,28 @@ function ManifestPanel({
               Compiles onto the DCM after both are loaded. Does not replace the manifest.
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const plan = parseBaplie(SAMPLE_BAPLIE, "sample-george-ii.edi");
-                setBaplie(plan);
-                saveBaplie(plan);
-              }}
-            >
-              Example BAPLIE
-            </Button>
-            {baplie ? (
-              <>
-                <Badge variant="navy">
-                  {baplie.boxes.length} boxes · {baplie.boxes.filter((b) => b.reefer).length} RF
-                </Badge>
-                <span className="text-xs text-muted">
-                  {[baplie.vessel, baplie.voyage, baplie.sourceName].filter(Boolean).join(" · ")}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="ml-auto"
-                  onClick={() => {
-                    setBaplie(null);
-                    saveBaplie(null);
-                  }}
-                >
-                  <Eraser />
-                  Clear BAPLIE
-                </Button>
-              </>
-            ) : null}
-          </div>
+          {baplie ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="navy">
+                {baplie.boxes.length} boxes · {baplie.boxes.filter((b) => b.reefer).length} RF
+              </Badge>
+              <span className="text-xs text-muted">
+                {[baplie.vessel, baplie.voyage, baplie.sourceName].filter(Boolean).join(" · ")}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto"
+                onClick={() => {
+                  setBaplie(null);
+                  saveBaplie(null);
+                }}
+              >
+                <Eraser />
+                Clear BAPLIE
+              </Button>
+            </div>
+          ) : null}
           {baplie?.warnings.length ? (
             <p className="text-xs text-review">{baplie.warnings.join(" ")}</p>
           ) : null}

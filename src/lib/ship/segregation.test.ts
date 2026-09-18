@@ -2,10 +2,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { evaluateManifest } from "../cdc/evaluate.ts";
 import { CONTAINER_OPTIONS, type LineInput } from "../cdc/types.ts";
-import { screenVoyage, segregationCode } from "./segregation.ts";
+import { screenVoyage, segregationCode, resolvedStow } from "./segregation.ts";
 import { athwartGap, isCasingCell } from "./george-ii.ts";
-import { parseStow } from "./stow.ts";
+import { hatchBuckets } from "./layout.ts";
 import { parseBaplie } from "../baplie/parse.ts";
+import { FIXTURE_BAPLIE } from "../baplie/sample.ts";
 
 function line(partial: Partial<LineInput> & Pick<LineInput, "un" | "hazClass">): LineInput {
   return {
@@ -225,7 +226,7 @@ describe("limited quantity", () => {
 });
 
 describe("BAPLIE stow copy and slot overlap", () => {
-  it("copies BAPLIE LOC+147 onto a DCM line with empty stow", () => {
+  it("does not write BAPLIE stow onto line.input; resolvedStow is the view-model", () => {
     const edi = `UNA:+.? '
 UNB+UNOA:2+PASHA+GEORGEII+260918:1200+1'
 UNH+1+BAPLIE:D:95B:UN:SMDG22'
@@ -241,11 +242,16 @@ UNZ+1+1'
       [line({ un: "1263", hazClass: "3", container: "ABCD1234567", packaging: "6 PA", quantityKg: 200 })],
       CONTAINER_OPTIONS,
     );
+    const before = evaluated.lines[0].input.stowLoc;
     const r = screenVoyage(evaluated.lines, plan);
-    const pos = parseStow(evaluated.lines[0].input.stowLoc);
+    assert.equal(evaluated.lines[0].input.stowLoc, before);
+    assert.equal(evaluated.lines[0].input.stowLoc, undefined);
+    const pos = resolvedStow(evaluated.lines[0], plan);
     assert.equal(pos?.hatch, 5, JSON.stringify(pos));
     assert.equal(pos?.row, 2);
     assert.equal(pos?.tier, 84);
+    const h5 = hatchBuckets(evaluated.lines, plan).find((b) => b.spec.id === 5);
+    assert.equal(h5?.lines.length, 1);
     assert.equal(r.issues.filter((i) => /pick one/i.test(i.title)).length, 0);
   });
 
@@ -300,5 +306,99 @@ UNZ+1+1'
       plan,
     );
     assert.ok(r.issues.some((i) => /two boxes in one slot/i.test(i.title)), JSON.stringify(r.issues));
+  });
+});
+
+describe("DCM vs BAPLIE cargo", () => {
+  it("watches when the same container has a different UN on the BAPLIE DGS", () => {
+    const edi = `UNA:+.? '
+UNB+UNOA:2+PASHA+GEORGEII+260918:1200+1'
+UNH+1+BAPLIE:D:95B:UN:SMDG22'
+BGM+34+T+9'
+LOC+147+0180184:139:5'
+EQD+CN+ABCD1234567+45G1:102:5++2+5'
+DGS+IMD+3+1992+II'
+UNT+10+1'
+UNZ+1+1'
+`;
+    const r = screen(
+      [line({ un: "1263", hazClass: "3", container: "ABCD1234567", stowLoc: "0180184", packaging: "6 PA", quantityKg: 200 })],
+      parseBaplie(edi, "un.edi"),
+    );
+    assert.ok(r.issues.some((i) => /DCM UN 1263 vs BAPLIE UN 1992/i.test(i.title)), JSON.stringify(r.issues));
+  });
+
+  it("watches when the same container has a different class / subsidiary on the BAPLIE DGS", () => {
+    const edi = `UNA:+.? '
+UNB+UNOA:2+PASHA+GEORGEII+260918:1200+1'
+UNH+1+BAPLIE:D:95B:UN:SMDG22'
+BGM+34+T+9'
+LOC+147+0180184:139:5'
+EQD+CN+ABCD1234567+45G1:102:5++2+5'
+DGS+IMD+3:6.1+1263+II'
+UNT+10+1'
+UNZ+1+1'
+`;
+    const r = screen(
+      [line({ un: "1263", hazClass: "3", container: "ABCD1234567", stowLoc: "0180184", packaging: "6 PA", quantityKg: 200 })],
+      parseBaplie(edi, "class.edi"),
+    );
+    assert.ok(r.issues.some((i) => /DCM class 3 vs BAPLIE 3 \(6\.1\)/i.test(i.title)), JSON.stringify(r.issues));
+    assert.equal(r.issues.filter((i) => /DCM UN /i.test(i.title)).length, 0);
+  });
+});
+
+describe("GEORGE II conversion-sheet watches", () => {
+  it("watches a live reefer on Bay 18, 6th tier", () => {
+    const edi = `UNA:+.? '
+UNB+UNOA:2+PASHA+GEORGEII+260918:1200+1'
+UNH+1+BAPLIE:D:95B:UN:SMDG22'
+BGM+34+T+9'
+EQD+CN+RF18T920001+45R1:102:5++2+5'
+LOC+147+0180292:139:5'
+TMP+2+-18:CEL'
+UNT+12+1'
+UNZ+1+1'
+`;
+    const r = screen([], parseBaplie(edi, "t92.edi"));
+    assert.ok(r.issues.some((i) => /Bay 18 6th-tier live reefer/i.test(i.title)), JSON.stringify(r.issues));
+  });
+
+  it("watches Hold 2 outboard 05/06 as within 3 m of machinery-space", () => {
+    const r = screen([
+      line({ un: "1263", hazClass: "3", container: "HOLD2000001", stowLoc: "0100604", packaging: "6 PA", quantityKg: 200 }),
+    ]);
+    assert.ok(r.issues.some((i) => /3 m of a Hold 2 machinery-space/i.test(i.title)), JSON.stringify(r.issues));
+    assert.equal(r.blocks, 0, JSON.stringify(r.issues));
+  });
+
+  it("watches Hatch 5 outboard 05/06 on the 5th tier for cargo-fan access", () => {
+    const edi = `UNA:+.? '
+UNB+UNOA:2+PASHA+GEORGEII+260918:1200+1'
+UNH+1+BAPLIE:D:95B:UN:SMDG22'
+BGM+34+T+9'
+EQD+CN+FAN05000001+45G1:102:5++2+5'
+LOC+147+0180590:139:5'
+UNT+10+1'
+UNZ+1+1'
+`;
+    const r = screen([], parseBaplie(edi, "fan.edi"));
+    assert.ok(r.issues.some((i) => /Hatch 5 outboard 05, 5th tier — cargo-fan access/i.test(i.title)), JSON.stringify(r.issues));
+  });
+});
+
+describe("20-box GEORGE II fixture", () => {
+  it("screens live RF, NOR, paint H5/H8, overlap, and the conversion watches without attachments", () => {
+    const plan = parseBaplie(FIXTURE_BAPLIE, "george-ii-20.edi");
+    assert.equal(plan.boxes.length, 20);
+    const r = screenVoyage([], plan);
+    assert.ok(r.issues.some((i) => /two boxes in one slot/i.test(i.title)), JSON.stringify(r.issues));
+    assert.ok(
+      r.issues.some((i) => i.severity === "block" && /Hatch 8/i.test(i.title) && /1263/.test(i.uns.join(" ") + i.title)),
+      JSON.stringify(r.issues.filter((i) => i.severity === "block")),
+    );
+    assert.ok(r.issues.some((i) => /Bay 18 6th-tier live reefer/i.test(i.title)), JSON.stringify(r.issues));
+    assert.ok(r.issues.some((i) => /cargo-fan access/i.test(i.title)), JSON.stringify(r.issues));
+    assert.ok(r.issues.some((i) => /3 m of a Hold 2 machinery-space/i.test(i.title)), JSON.stringify(r.issues));
   });
 });

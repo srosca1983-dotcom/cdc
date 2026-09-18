@@ -92,7 +92,7 @@ export const RULE_CARDS: RuleCard[] = [
 ];
 
 export const ENOAD_BLURB =
-  "Paste the boxed block into an email to the Master, then into the NVMC eNOAD cargo section. Table 160.206 (3)(i) is general cargo other than CDC (CONTAINERIZED). (3)(ii)–(iii) are name, UN number, and amount of each Certain Dangerous Cargo. If nothing qualifies: CDC CARRIED: NO.";
+  "Paste the boxed block into an email to the Master, then into the NVMC eNOAD cargo section. Table 160.206 (3) is CONTAINERIZED general cargo plus NAME / UN / AMOUNT for each Certain Dangerous Cargo. The packet also carries class, kg, container, stow and residue. If nothing qualifies: CDC CARRIED: NO.";
 
 export const DISCLAIMER =
   "Screening aid for container-ship cargo based on 33 CFR 160.202 and the permit rule in 49 CFR 176.415. It is not a Coast Guard determination, not legal advice, and not a substitute for the IMDG Code, 49 CFR, or the shipping papers. Prefer the Excel DCM over the printed PDF when both exist. If you are not sure, report it.";

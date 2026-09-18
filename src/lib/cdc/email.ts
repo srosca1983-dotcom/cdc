@@ -28,14 +28,33 @@ export const GENERAL_CARGO_LINE = "GENERAL CARGO (other than CDC): CONTAINERIZED
 
 export const NO_CDC_PASTE = `${GENERAL_CARGO_LINE}\nCDC CARRIED: NO`;
 
-/** 33 CFR 160.206 (3) cargo fields for NVMC eNOAD. */
+function classOnLine(line: LineResult): string {
+  const c = (line.hazClass || "").trim() || "—";
+  const s = (line.input.subsidiary || "").trim();
+  if (s && !c.includes("(")) return `${c} (${s})`;
+  return c;
+}
+
+/** 33 CFR 160.206 (3) cargo fields for NVMC eNOAD, plus class / container / stow / residue. */
 export function enoadPasteBlock(result: EvalResult): string {
-  if (result.enoad.length === 0) return NO_CDC_PASTE;
-  const items = result.enoad.map((e) => {
-    const amount = e.amountLabel && e.amountLabel !== "—" ? e.amountLabel : "AMOUNT NOT ON MANIFEST — CONFIRM";
-    return [`NAME: ${e.name.toUpperCase()}`, `UN NUMBER: ${e.un}`, `AMOUNT: ${amount}`].join("\n");
+  const rows = result.lines.filter((l) => l.verdict === "CDC" || l.verdict === "CDC_RESIDUE");
+  if (rows.length === 0) return NO_CDC_PASTE;
+  const items = rows.map((l) => {
+    const amount =
+      l.quantityKg === null || !Number.isFinite(l.quantityKg)
+        ? "AMOUNT NOT ON MANIFEST — CONFIRM"
+        : formatKg(l.quantityKg);
+    return [
+      `NAME: ${(l.catalogName || l.name).toUpperCase()}`,
+      `UN NUMBER: ${l.un}`,
+      `CLASS: ${classOnLine(l)}`,
+      `AMOUNT: ${amount}`,
+      `CONTAINER: ${clean(l.input.container) || "NOT ON MANIFEST"}`,
+      `STOW: ${clean(l.input.stowLoc) || "NOT ON MANIFEST"}`,
+      `RESIDUE: ${l.verdict === "CDC_RESIDUE" ? "YES" : "NO"}`,
+    ].join("\n");
   });
-  return [GENERAL_CARGO_LINE, "CDC CARRIED: YES", "", ...items].join("\n");
+  return [GENERAL_CARGO_LINE, "CDC CARRIED: YES", "", items.join("\n\n")].join("\n");
 }
 
 function reviewNotes(result: EvalResult): string {

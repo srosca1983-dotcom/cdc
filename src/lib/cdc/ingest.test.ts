@@ -89,6 +89,38 @@ describe("Pasha-style sample email", () => {
     assert.match(paste, /UN NUMBER: /);
     assert.match(paste, /AMOUNT: /);
   });
+
+  it("puts class, container, stow and residue on the eNOAD packet", () => {
+    const result = evaluateManifest(
+      [
+        {
+          rowIndex: 1,
+          un: "1005",
+          name: "AMMONIA, ANHYDROUS",
+          hazClass: "2.3",
+          subsidiary: "",
+          packaging: "1 TK",
+          packingGroup: "",
+          quantityKg: 18000,
+          quantityRaw: "18000 kg",
+          raw: [],
+          container: "ABCD1234567",
+          stowLoc: "0180184",
+        },
+      ],
+      CONTAINER_OPTIONS,
+    );
+    assert.ok(result.cdc >= 1 || result.residue >= 1, JSON.stringify(result.lines[0]));
+    const paste = enoadPasteBlock(result);
+    assert.match(paste, /CDC CARRIED: YES/);
+    assert.match(paste, /NAME: /);
+    assert.match(paste, /UN NUMBER: 1005/);
+    assert.match(paste, /CLASS: 2\.3/);
+    assert.match(paste, /AMOUNT: /);
+    assert.match(paste, /CONTAINER: ABCD1234567/);
+    assert.match(paste, /STOW: 0180184/);
+    assert.match(paste, /RESIDUE: NO/);
+  });
 });
 
 describe("category scan", () => {

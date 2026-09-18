@@ -1,7 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseBaplie, looksLikeBaplie } from "./parse.ts";
-import { SAMPLE_BAPLIE } from "./sample.ts";
+import { SAMPLE_BAPLIE, FIXTURE_BAPLIE } from "./sample.ts";
 import { reeferHeatIssues, reeferMotors, heatSensitive } from "./heat.ts";
 import { evaluateManifest } from "../cdc/evaluate.ts";
 import { CONTAINER_OPTIONS, type LineInput } from "../cdc/types.ts";
@@ -55,6 +58,26 @@ describe("BAPLIE", () => {
     assert.equal(holdRf?.motors, "fwd");
     assert.equal(holdRf?.stow?.bay, 6);
     assert.equal(holdRf?.stow?.onDeck, false);
+  });
+
+  it("reads the vendored 20-box GEORGE II fixture", () => {
+    const file = join(dirname(fileURLToPath(import.meta.url)), "fixtures/george-ii-20.edi");
+    assert.equal(existsSync(file), true);
+    const fromFile = parseBaplie(readFileSync(file, "utf8"), "george-ii-20.edi");
+    const fromExport = parseBaplie(FIXTURE_BAPLIE, "george-ii-20.edi");
+    assert.equal(fromFile.boxes.length, 20);
+    assert.equal(fromExport.boxes.length, 20);
+    assert.ok(fromExport.boxes.some((b) => b.container === "RFRA0000001" && b.reefer && b.operating));
+    assert.ok(fromExport.boxes.some((b) => b.container === "NORA0000005" && b.reefer && !b.operating));
+    assert.ok(fromExport.boxes.some((b) => b.container === "DGPA0000002" && b.stow?.hatch === 5 && b.dg[0]?.un === "1263"));
+    assert.ok(fromExport.boxes.some((b) => b.container === "DGPB0000008" && b.stow?.hatch === 8 && b.dg[0]?.un === "1263"));
+    const forty = fromExport.boxes.find((b) => b.container === "FORTY0000001");
+    const twenty = fromExport.boxes.find((b) => b.container === "TWENT0000001");
+    assert.equal(forty?.stow?.fortyFoot, true);
+    assert.equal(twenty?.stow?.fortyFoot, false);
+    assert.equal(forty?.stow?.hatch, 4);
+    assert.equal(twenty?.stow?.hatch, 4);
+    assert.equal(fromExport.boxes.filter((b) => b.stow).length, 20);
   });
 
   it("applies pending LOC+147 to following EQDs and splits the equipment id", () => {

@@ -167,11 +167,32 @@ interface Box {
   allLq: boolean;
 }
 
-function boxesFrom(lines: LineResult[]): Box[] {
+/** BAPLIE box for this container number, if the plan has one. */
+export function planBoxFor(container: string | undefined, plan: BapliePlan | null): BaplieBox | null {
+  if (!plan || !container) return null;
+  const k = containerKey(container);
+  if (!k) return null;
+  return plan.boxes.find((b) => containerKey(b.container) === k) ?? null;
+}
+
+/**
+ * Stow used for drawing and alarms: DCM if it parses, otherwise the BAPLIE cell.
+ * Never writes onto line.input — that is a view-model, not a mutate-in-render.
+ */
+export function resolvedStow(
+  line: { input: { stowLoc?: string; container?: string } },
+  plan: BapliePlan | null = null,
+): StowPos | null {
+  const dcm = parseStow(line.input.stowLoc);
+  if (dcm) return dcm;
+  return planBoxFor(line.input.container, plan)?.stow ?? null;
+}
+
+function boxesFrom(lines: LineResult[], plan: BapliePlan | null = null): Box[] {
   const map = new Map<string, Box>();
   for (const line of lines) {
     if (!line.un) continue;
-    const stow = parseStow(line.input.stowLoc);
+    const stow = resolvedStow(line, plan);
     const cn = containerKey(line.input.container) || `row-${line.input.rowIndex}`;
     const cur = map.get(cn) ?? {
       key: cn,
@@ -462,8 +483,8 @@ function mergeBaplie(boxes: Box[], plan: BapliePlan | null): Box[] {
 }
 
 /**
- * Copy BAPLIE LOC+147 onto a DCM line that has no parseable stow.
- * If both parse and disagree, keep the DCM cell and raise one watch.
+ * Stow disagreement only. Does not write onto line.input — use resolvedStow
+ * for the view-model cell.
  */
 export function applyPlanStow(lines: LineResult[], plan: BapliePlan | null): StowIssue[] {
   if (!plan) return [];
@@ -481,10 +502,7 @@ export function applyPlanStow(lines: LineResult[], plan: BapliePlan | null): Sto
     if (!box?.stow) continue;
     const dcm = parseStow(line.input.stowLoc);
     const planRaw = box.stowRaw || formatStowRaw(box.stow);
-    if (!dcm) {
-      line.input.stowLoc = planRaw;
-      continue;
-    }
+    if (!dcm) continue;
     if (stowEqual(dcm, box.stow)) continue;
     if (seen.has(k)) continue;
     seen.add(k);
@@ -498,6 +516,226 @@ export function applyPlanStow(lines: LineResult[], plan: BapliePlan | null): Sto
       title: `DCM stow ${dcmRaw} vs BAPLIE ${planRaw} — pick one.`,
       detail: `${line.input.container || k} is ${dcmRaw} on the DCM and ${planRaw} on the BAPLIE. Alarms stay on the DCM cell; the plan slot is drawn separately.`,
       rule: "DCM vs BAPLIE stow",
+    });
+  }
+  return issues;
+}
+
+function padUn(un: string): string {
+  const d = (un || "").replace(/^UN/i, "").replace(/\D/g, "");
+  if (!d) return "";
+  return d.padStart(4, "0").slice(-4);
+}
+
+function classSig(cls: string, sub?: string): string {
+  const g = classGroup(cls) || (cls || "").replace(/\s+/g, "").toUpperCase();
+  const extracted = (cls || "").match(/\(([^)]+)\)/);
+  const subRaw = (sub || extracted?.[1] || "").trim();
+  const sg = subRaw ? classGroup(subRaw) || subRaw : "";
+  if (!g) return sg;
+  return sg ? `${g}|${sg}` : g;
+}
+
+function classDisplay(cls: string, sub?: string): string {
+  const c = (cls || "").trim();
+  const extracted = c.match(/^([^\s(]+)\s*\(([^)]+)\)/);
+  const primary = extracted ? extracted[1] : c;
+  const s = (sub || extracted?.[2] || "").trim();
+  if (s) return `${primary} (${s})`;
+  return primary;
+}
+
+function uniqueJoin(values: string[]): string {
+  return [...new Set(values.filter(Boolean))].join(", ");
+}
+
+/**
+ * Same container: Excel UN/class vs BAPLIE DGS. Stow mismatch is a different watch.
+ */
+export function cargoCompareIssues(lines: LineResult[], plan: BapliePlan | null): StowIssue[] {
+  if (!plan) return [];
+  const dcmBy = new Map<string, LineResult[]>();
+  for (const line of lines) {
+    const k = containerKey(line.input.container);
+    if (!k || !line.un) continue;
+    const cur = dcmBy.get(k) ?? [];
+    cur.push(line);
+    dcmBy.set(k, cur);
+  }
+  const issues: StowIssue[] = [];
+  const seen = new Set<string>();
+  for (const box of plan.boxes) {
+    if (!box.dg.length) continue;
+    const k = containerKey(box.container);
+    if (!k || seen.has(k)) continue;
+    const dcmLines = dcmBy.get(k);
+    if (!dcmLines?.length) continue;
+    seen.add(k);
+    const stow = parseStow(dcmLines[0].input.stowLoc) ?? box.stow;
+    const hatch = stow?.hatch ?? 0;
+    const dcmUns = [...new Set(dcmLines.map((l) => padUn(l.un)).filter(Boolean))].sort();
+    const bapUns = [...new Set(box.dg.map((d) => padUn(d.un)).filter(Boolean))].sort();
+    const dcmClass = new Map<string, string>();
+    for (const l of dcmLines) {
+      const sig = classSig(l.hazClass, l.input.subsidiary);
+      if (!sig) continue;
+      if (!dcmClass.has(sig)) dcmClass.set(sig, classDisplay(l.hazClass, l.input.subsidiary));
+    }
+    const bapClass = new Map<string, string>();
+    for (const d of box.dg) {
+      const sig = classSig(d.cls, d.subsidiary);
+      if (!sig) continue;
+      if (!bapClass.has(sig)) bapClass.set(sig, classDisplay(d.cls, d.subsidiary));
+    }
+    const base = {
+      severity: "watch" as const,
+      hatch,
+      containers: [box.container],
+    };
+    if (bapUns.length && dcmUns.join(",") !== bapUns.join(",")) {
+      issues.push({
+        id: `cargo-un-${k}`,
+        ...base,
+        uns: [...new Set([...dcmUns, ...bapUns])],
+        title: `DCM UN ${dcmUns.join(", ")} vs BAPLIE UN ${bapUns.join(", ")} — pick one.`,
+        detail: `${box.container} lists UN ${uniqueJoin(dcmUns)} on the DCM and UN ${uniqueJoin(bapUns)} on the BAPLIE DGS. Same box cannot carry two identities.`,
+        rule: "DCM vs BAPLIE cargo — UN",
+      });
+    }
+    const dcmSigs = [...dcmClass.keys()].sort().join(",");
+    const bapSigs = [...bapClass.keys()].sort().join(",");
+    if (dcmClass.size && bapClass.size && dcmSigs !== bapSigs) {
+      issues.push({
+        id: `cargo-class-${k}`,
+        ...base,
+        uns: dcmUns.length ? dcmUns : bapUns,
+        title: `DCM class ${[...dcmClass.values()].join(", ")} vs BAPLIE ${[...bapClass.values()].join(", ")} — pick one.`,
+        detail: `${box.container} is class ${[...dcmClass.values()].join(", ")} on the DCM and ${[...bapClass.values()].join(", ")} on the BAPLIE DGS (including subsidiary).`,
+        rule: "DCM vs BAPLIE cargo — class",
+      });
+    }
+  }
+  return issues;
+}
+
+function rowPad(row: number): string {
+  return String(row).padStart(2, "0");
+}
+
+/**
+ * Conversion-sheet / CSM watches that are not 176.83:
+ * Bay 18 6th-tier live reefer, Hold 2 3 m from machinery, Hatch 5 05/06 5th tier.
+ */
+export function csmShipWatches(lines: LineResult[], plan: BapliePlan | null): StowIssue[] {
+  const issues: StowIssue[] = [];
+  const seen = new Set<string>();
+  const push = (issue: StowIssue) => {
+    if (seen.has(issue.id)) return;
+    seen.add(issue.id);
+    issues.push(issue);
+  };
+
+  const occupants: { key: string; container: string; stow: StowPos; operating: boolean }[] = [];
+  const onPlan = new Set<string>();
+  if (plan) {
+    for (const b of plan.boxes) {
+      if (!b.stow) continue;
+      const key = containerKey(b.container) || b.container.toUpperCase();
+      onPlan.add(key);
+      occupants.push({
+        key,
+        container: b.container,
+        stow: b.stow,
+        operating: b.operating,
+      });
+    }
+  }
+  for (const line of lines) {
+    const stow = resolvedStow(line, plan);
+    if (!stow) continue;
+    const key = containerKey(line.input.container) || `row-${line.input.rowIndex}`;
+    if (onPlan.has(key)) continue;
+    occupants.push({
+      key,
+      container: line.input.container || key,
+      stow,
+      operating: false,
+    });
+  }
+
+  for (const o of occupants) {
+    const spec = hatchSpec(o.stow.hatch);
+    const bays = occupiedBays(o.stow, spec);
+    if (o.operating && o.stow.onDeck && o.stow.tier === 92 && bays.includes(18)) {
+      push({
+        id: `watch-bay18-t92-${o.key}`,
+        severity: "watch",
+        hatch: o.stow.hatch,
+        containers: [o.container],
+        uns: [],
+        title: `Bay 18 6th-tier live reefer — conversion sheet says do not.`,
+        detail: `${o.container} is a live reefer at ${formatStowRaw(o.stow)} (Bay 18, tier 92). The conversion sheet does not allow 6th-tier reefers on bay 18.`,
+        rule: "GEORGE II conversion — Bay 18 no 6th-tier reefer",
+      });
+    }
+    if (
+      o.stow.hatch === 5 &&
+      o.stow.onDeck &&
+      o.stow.tier === 90 &&
+      (o.stow.row === 5 || o.stow.row === 6)
+    ) {
+      push({
+        id: `watch-h5-fan-${o.key}`,
+        severity: "watch",
+        hatch: 5,
+        containers: [o.container],
+        uns: [],
+        title: `${o.container} is on Hatch 5 outboard ${rowPad(o.stow.row)}, 5th tier — cargo-fan access.`,
+        detail: `Outboard cells 05 and 06 on Hatch 5, 5th tier (90) are cargo-fan access. Prefer not to stow here.`,
+        rule: "GEORGE II conversion — Hatch 5 cargo-fan access",
+      });
+    }
+  }
+
+  const hold2Boxes: { key: string; container: string; stow: StowPos; uns: string[] }[] = [];
+  const hold2Seen = new Set<string>();
+  for (const line of lines) {
+    if (!line.un || isLimitedQty(line)) continue;
+    const stow = resolvedStow(line, plan);
+    if (!stow || stow.onDeck) continue;
+    if (stow.hatch !== 3 && stow.hatch !== 4) continue;
+    if (stow.row !== 5 && stow.row !== 6) continue;
+    const key = containerKey(line.input.container) || `row-${line.input.rowIndex}`;
+    if (hold2Seen.has(key)) continue;
+    hold2Seen.add(key);
+    hold2Boxes.push({ key, container: line.input.container || key, stow, uns: [line.un] });
+  }
+  if (plan) {
+    for (const b of plan.boxes) {
+      if (!b.dg.length || !b.stow || b.stow.onDeck) continue;
+      if (b.stow.hatch !== 3 && b.stow.hatch !== 4) continue;
+      if (b.stow.row !== 5 && b.stow.row !== 6) continue;
+      const key = containerKey(b.container) || b.container.toUpperCase();
+      if (hold2Seen.has(key)) continue;
+      hold2Seen.add(key);
+      hold2Boxes.push({
+        key,
+        container: b.container,
+        stow: b.stow,
+        uns: b.dg.map((d) => d.un).filter(Boolean),
+      });
+    }
+  }
+  for (const box of hold2Boxes) {
+    push({
+      id: `watch-h2-mach-${box.key}`,
+      severity: "watch",
+      hatch: box.stow.hatch,
+      containers: [box.container],
+      uns: box.uns,
+      title: `${box.container} is within 3 m of a Hold 2 machinery-space boundary`,
+      detail: `CSM Hold 2: stow 3 m from machinery-space boundaries. Outboard cells 05 and 06 sit against the vent/machinery casings — not only Hatch 10 rows 03/04.`,
+      rule: "CSM Hold 2 — 3 m from machinery-space",
     });
   }
   return issues;
@@ -519,7 +757,7 @@ function slotOccupants(lines: LineResult[], plan: BapliePlan | null): Occupant[]
     }
   }
   for (const line of lines) {
-    const stow = parseStow(line.input.stowLoc);
+    const stow = resolvedStow(line, plan);
     if (!stow) continue;
     const key = containerKey(line.input.container) || `row-${line.input.rowIndex}`;
     if (map.has(key)) continue;
@@ -565,8 +803,10 @@ export function slotOverlapIssues(lines: LineResult[], plan: BapliePlan | null):
 
 export function screenVoyage(lines: LineResult[], plan: BapliePlan | null = null): VoyageScreen {
   const mismatch = applyPlanStow(lines, plan);
-  const boxes = mergeBaplie(boxesFrom(lines), plan);
-  const issues: StowIssue[] = [...mismatch, ...slotOverlapIssues(lines, plan)];
+  const cargo = cargoCompareIssues(lines, plan);
+  const ship = csmShipWatches(lines, plan);
+  const boxes = mergeBaplie(boxesFrom(lines, plan), plan);
+  const issues: StowIssue[] = [...mismatch, ...cargo, ...ship, ...slotOverlapIssues(lines, plan)];
   for (const box of boxes) {
     const spec = box.stow ? hatchSpec(box.stow.hatch) : undefined;
     if (spec) issues.push(...locationIssues(box, spec));

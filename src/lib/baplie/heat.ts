@@ -1,8 +1,8 @@
 import type { LineResult } from "../cdc/types.ts";
 import { isLimitedQty } from "../cdc/limited.ts";
 import { athwartGap, occupiedBays, sameBayColumn } from "../ship/george-ii.ts";
-import { containerKey, parseStow, type StowPos } from "../ship/stow.ts";
-import { applyPlanStow, type StowIssue } from "../ship/segregation.ts";
+import { containerKey, type StowPos } from "../ship/stow.ts";
+import { resolvedStow, type StowIssue } from "../ship/segregation.ts";
 import type { BaplieBox, BapliePlan } from "./types.ts";
 
 /** Conversion sheet: all reefers face aft, except bay 6 or 22 below (motors fwd). HAN+RFF overrides. */
@@ -58,7 +58,7 @@ function dgSpots(lines: LineResult[], plan: BapliePlan | null): DgSpot[] {
   const seen = new Set<string>();
   const onDcm = new Set<string>();
   for (const line of lines) {
-    const stow = parseStow(line.input.stowLoc);
+    const stow = resolvedStow(line, plan);
     if (!stow) continue;
     const container = containerKey(line.input.container) || `row-${line.input.rowIndex}`;
     if (containerKey(line.input.container)) onDcm.add(container);
@@ -92,7 +92,6 @@ function dgSpots(lines: LineResult[], plan: BapliePlan | null): DgSpot[] {
 
 export function reeferHeatIssues(lines: LineResult[], plan: BapliePlan | null): StowIssue[] {
   if (!plan) return [];
-  applyPlanStow(lines, plan);
   const reefers = plan.boxes.filter((b) => b.reefer && b.operating && b.stow);
   const dgs = dgSpots(lines, plan);
   const issues: StowIssue[] = [];

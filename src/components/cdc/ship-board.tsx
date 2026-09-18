@@ -10,7 +10,6 @@ import {
   type HatchBucket,
 } from "@/lib/ship/layout.ts";
 import {
-  applyPlanStow,
   issuesForKey,
   screenVoyage,
   worstSeverity,
@@ -45,13 +44,10 @@ export function ShipBoard({
 
   const lines = result?.lines ?? [];
   const lqOf = (line: LineResult) => isLimitedQty(line);
-  const buckets = useMemo(() => {
-    applyPlanStow(lines, baplie);
-    return hatchBuckets(lines);
-  }, [lines, baplie]);
+  const buckets = useMemo(() => hatchBuckets(lines, baplie), [lines, baplie]);
   const screen = useMemo(() => screenVoyage(lines, baplie), [lines, baplie]);
   const heat = useMemo(() => reeferHeatIssues(lines, baplie), [lines, baplie]);
-  const loose = useMemo(() => unstowed(lines), [lines]);
+  const loose = useMemo(() => unstowed(lines, baplie), [lines, baplie]);
   const active = buckets.find((b) => b.spec.id === hatchId) ?? null;
   const slots = active ? hatchSlots(active, baplie) : [];
   const slot = slots.find((s) => s.key === slotKey) ?? null;

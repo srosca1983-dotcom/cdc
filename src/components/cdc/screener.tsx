@@ -5,8 +5,6 @@ import {
   ClipboardCopy,
   Download,
   Eraser,
-  FileSpreadsheet,
-  FileText,
   GitCompare,
   History,
   Mail,
@@ -34,19 +32,19 @@ import { compareManifests, kindLabel, mergeStowFromAll, selectPreferred, type Ma
 import { packFormLabel } from "@/lib/cdc/packaging.ts";
 import { formatKg } from "@/lib/cdc/quantity.ts";
 import { DISCLAIMER, ENOAD_BLURB, RULE_CARDS } from "@/lib/cdc/rules-text.ts";
-import { PASHA_SAMPLE, WORKED_SAMPLE } from "@/lib/cdc/sample.ts";
 import { categoryScan, type ScanItem } from "@/lib/cdc/scan.ts";
-import { loadCargo, loadVoyageLog, logLabel, pushVoyageLog, saveCargo, voyageBits, type VoyageLog } from "@/lib/cdc/history.ts";
+import { loadCargo, loadVoyageLog, logLabel, pushVoyageLog, saveCargo, clearCargo, isDemoSource, voyageBits, type VoyageLog } from "@/lib/cdc/history.ts";
 import { isLimitedQty } from "@/lib/cdc/limited.ts";
 import { CONTAINER_OPTIONS } from "@/lib/cdc/types.ts";
 import type { EvalResult, LineResult, ParseResult, VoyageInfo } from "@/lib/cdc/types.ts";
 import { cn } from "@/lib/utils";
-import { ShipBoard, ResponseIndex, ChemicalView } from "@/components/cdc/ship-board.tsx";
-import { sheetFor } from "@/lib/erg/guides.ts";
+import { ShipBoard, ChemicalView } from "@/components/cdc/ship-board.tsx";
+import { VoyageRisksView } from "@/components/cdc/voyage-risks.tsx";
+import { sheetFor, sheetSections } from "@/lib/erg/guides.ts";
 import { isBaplieFilename, looksLikeBaplie, parseBaplie } from "@/lib/baplie/parse.ts";
-import { SAMPLE_BAPLIE } from "@/lib/baplie/sample.ts";
 import { loadBaplie, saveBaplie } from "@/lib/baplie/store.ts";
 import type { BapliePlan } from "@/lib/baplie/types.ts";
+import { BaplieSummary } from "@/components/cdc/baplie-summary.tsx";
 
 type Tab = "manifest" | "ship" | "response" | "lookup" | "rules";
 type Filter = "flagged" | "all" | "CDC" | "REVIEW" | "NOT_CDC" | "full" | "lq";
@@ -73,12 +71,14 @@ export function Screener() {
       setParsed(restored);
       setResult(evaluateManifest(stored.lines, CONTAINER_OPTIONS));
     }
-    setBaplie(loadBaplie());
+    const plan = loadBaplie();
+    if (plan && isDemoSource(plan.sourceName)) saveBaplie(null);
+    else setBaplie(plan);
   }, []);
 
   return (
     <div className="min-h-dvh bg-bg">
-      <Header tab={tab} onTab={setTab} hasVoyage={Boolean(result || baplie)} />
+      <Header tab={tab} onTab={setTab} />
       <main className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">
         {tab === "manifest" && (
           <ManifestPanel
@@ -94,17 +94,8 @@ export function Screener() {
           <ShipBoard parsed={parsed} result={result} baplie={baplie} />
         )}
         {tab === "ship" && !result && !baplie && <NeedVoyage onGo={() => setTab("manifest")} />}
-        {tab === "response" && result && !chem && (
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-xl font-medium">Spill and fire sheets</h2>
-              <p className="mt-1 text-sm text-muted">
-                Every UN on this voyage. Press a line for how it looks, how it burns, and
-                what to do on GEORGE II.
-              </p>
-            </div>
-            <ResponseIndex lines={result.lines} onOpen={setChem} />
-          </div>
+        {tab === "response" && (result || baplie) && !chem && (
+          <VoyageRisksView result={result} baplie={baplie} onOpen={setChem} />
         )}
         {tab === "response" && chem && (
           <ChemicalView
@@ -112,7 +103,7 @@ export function Screener() {
             onBack={() => setChem(null)}
           />
         )}
-        {tab === "response" && !result && <NeedVoyage onGo={() => setTab("manifest")} />}
+        {tab === "response" && !result && !baplie && <NeedVoyage onGo={() => setTab("manifest")} />}
         {tab === "lookup" && <LookupPanel />}
         {tab === "rules" && <RulesPanel />}
       </main>
@@ -120,7 +111,7 @@ export function Screener() {
   );
 }
 
-function Header({ tab, onTab, hasVoyage }: { tab: Tab; onTab: (t: Tab) => void; hasVoyage: boolean }) {
+function Header({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
   return (
     <header className="bg-navy text-primary-foreground">
       <div className="mx-auto flex max-w-[1400px] flex-col gap-5 px-4 py-5 sm:px-6 sm:py-6">
@@ -131,16 +122,16 @@ function Header({ tab, onTab, hasVoyage }: { tab: Tab; onTab: (t: Tab) => void; 
             </span>
             <div>
               <p className="font-mono text-[11px] tracking-[0.18em] text-primary-foreground/60 uppercase">
-                Container ship · USCG eNOAD · 33 CFR 160.202
+                Container ship · DCM + BAPLIE · 33 CFR 160.202
               </p>
               <h1 className="mt-1 text-xl font-medium tracking-tight sm:text-2xl">
-                Certain Dangerous Cargo for the Master
+                Cargo and DCM Viewer
               </h1>
               <p className="mt-1 max-w-2xl text-sm text-primary-foreground/70">
                 Drop the Excel DCM, the Word FINAL DCM, and the printed manifest.
-                CDC is screened from that voyage. BAPLIE is optional — drop it when you
-                want reefers and the rest of the bay plan.
-
+                Stow and CDC come from that voyage. BAPLIE is optional. Open
+                What can go wrong for fire, explosion, toxic vapor, wetting, hold
+                entry, lost boxes, and the rest.
               </p>
             </div>
           </div>
@@ -148,12 +139,12 @@ function Header({ tab, onTab, hasVoyage }: { tab: Tab; onTab: (t: Tab) => void; 
             Container ships only
           </Badge>
         </div>
-        <nav className="flex flex-wrap gap-1 rounded-lg bg-navy-2 p-1" aria-label="Primary">
+        <nav className="flex flex-wrap gap-1 overflow-x-auto rounded-lg bg-navy-2 p-1" aria-label="Primary">
           {(
             [
               ["manifest", "Manifest"],
               ["ship", "Ship"],
-              ["response", "Spill / fire"],
+              ["response", "What can go wrong"],
               ["lookup", "UN lookup"],
               ["rules", "33 CFR 160.202"],
             ] as const
@@ -163,13 +154,13 @@ function Header({ tab, onTab, hasVoyage }: { tab: Tab; onTab: (t: Tab) => void; 
               type="button"
               onClick={() => onTab(id)}
               className={cn(
-                "h-10 flex-1 rounded-md px-3 text-sm font-medium transition-colors duration-150 sm:flex-none sm:px-5",
+                "h-10 shrink-0 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors duration-150 sm:px-5",
                 tab === id
                   ? "bg-surface text-ink"
                   : "text-primary-foreground/70 hover:text-primary-foreground",
               )}
             >
-              {id === "ship" && hasVoyage ? `${label} ·` : label}
+              {label}
             </button>
           ))}
         </nav>
@@ -226,7 +217,7 @@ function ManifestPanel({
 
   useEffect(() => {
     setMounted(true);
-    setLog(loadVoyageLog());
+    setLog(loadVoyageLog().filter((e) => !isDemoSource(e.sourceName)));
   }, []);
 
   function applyParsed(next: ParseResult) {
@@ -362,12 +353,6 @@ function ManifestPanel({
     }
   }
 
-  function loadSample(text: string, name: string) {
-    const next = parseManifest(text, "lb");
-    next.sourceName = name;
-    applyParsed(next);
-  }
-
   const flaggedCount = result ? result.cdc + result.residue + result.review : 0;
   const lqCount = result ? result.lines.filter((l) => isLimitedQty(l)).length : 0;
   const fullCount = result ? result.total - lqCount : 0;
@@ -481,14 +466,6 @@ function ManifestPanel({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => loadSample(PASHA_SAMPLE, "pasha-style-sample.tsv")}>
-              <FileSpreadsheet />
-              Pasha-style sample
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => loadSample(WORKED_SAMPLE, "worked-cdc-example.tsv")}>
-              <FileText />
-              Example with CDC
-            </Button>
             <Button variant="ghost" size="sm" onClick={() => setShowPaste((v) => !v)}>
               Paste instead
             </Button>
@@ -504,6 +481,7 @@ function ManifestPanel({
                 setRestored(null);
                 setQuery("");
                 setCompare(null);
+                clearCargo();
               }}
             >
               <Eraser />
@@ -540,7 +518,7 @@ function ManifestPanel({
         </div>
       </section>
 
-      <section className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)] sm:p-5">
+      <section id="baplie-panel" className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)] sm:p-5">
         <div className="flex flex-col gap-3">
           <div>
             <h2 className="text-base font-medium">BAPLIE (optional)</h2>
@@ -570,44 +548,32 @@ function ManifestPanel({
               Compiles onto the DCM after both are loaded. Does not replace the manifest.
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const plan = parseBaplie(SAMPLE_BAPLIE, "sample-george-ii.edi");
-                setBaplie(plan);
-                saveBaplie(plan);
-              }}
-            >
-              Example BAPLIE
-            </Button>
-            {baplie ? (
-              <>
-                <Badge variant="navy">
-                  {baplie.boxes.length} boxes · {baplie.boxes.filter((b) => b.reefer).length} RF
-                </Badge>
-                <span className="text-xs text-muted">
-                  {[baplie.vessel, baplie.voyage, baplie.sourceName].filter(Boolean).join(" · ")}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="ml-auto"
-                  onClick={() => {
-                    setBaplie(null);
-                    saveBaplie(null);
-                  }}
-                >
-                  <Eraser />
-                  Clear BAPLIE
-                </Button>
-              </>
-            ) : null}
-          </div>
+          {baplie ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="navy">
+                {baplie.boxes.length} boxes · {baplie.boxes.filter((b) => b.reefer).length} RF
+              </Badge>
+              <span className="text-xs text-muted">
+                {[baplie.vessel, baplie.voyage, baplie.sourceName].filter(Boolean).join(" · ")}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto"
+                onClick={() => {
+                  setBaplie(null);
+                  saveBaplie(null);
+                }}
+              >
+                <Eraser />
+                Clear BAPLIE
+              </Button>
+            </div>
+          ) : null}
           {baplie?.warnings.length ? (
             <p className="text-xs text-review">{baplie.warnings.join(" ")}</p>
           ) : null}
+          {baplie ? <BaplieSummary plan={baplie} /> : null}
         </div>
       </section>
 
@@ -1036,8 +1002,7 @@ function EmptyHint({
             <h2 className="text-sm font-medium">Recent voyages</h2>
           </div>
           <p className="mt-1 text-xs text-muted">
-            Email is kept here. The last voyage’s cargo lines stay on this computer
-            for the hatch plan.
+            Email is kept here. Cargo lines stay only until you press Clear DCM.
           </p>
           <ul className="mt-3 flex flex-col gap-2">
             {log.map((e) => (
@@ -1275,7 +1240,35 @@ function LookupPanel() {
           ) : null}
         </section>
       ) : null}
+
+      {row ? <LookupSheet un={row.un} cls={row.hazClass} name={row.name} /> : null}
     </div>
+  );
+}
+
+function LookupSheet({ un, cls, name }: { un: string; cls: string; name: string }) {
+  const sheet = sheetFor(un, cls, name);
+  const sections = sheetSections(sheet);
+  return (
+    <section className="rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
+      <p className="font-mono text-[11px] tracking-wide text-accent uppercase">
+        {sheet.guide} · Class {sheet.cls}
+      </p>
+      <h2 className="mt-2 text-base font-medium">What can go wrong — UN {sheet.un}</h2>
+      <p className="mt-1 text-sm text-muted">{sheet.looksLike}</p>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {sections.map((s) => (
+          <article key={s.title}>
+            <h3 className="text-sm font-medium">{s.title}</h3>
+            <ul className="mt-1 space-y-1 text-sm text-muted">
+              {s.items.map((t) => (
+                <li key={t}>— {t}</li>
+              ))}
+            </ul>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 

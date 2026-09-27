@@ -1,8 +1,8 @@
 import type { LineResult } from "../cdc/types.ts";
 import { isLimitedQty } from "../cdc/limited.ts";
 import { athwartGap, occupiedBays, sameBayColumn } from "../ship/george-ii.ts";
-import { containerKey, parseStow, type StowPos } from "../ship/stow.ts";
-import { applyPlanStow, type StowIssue } from "../ship/segregation.ts";
+import { containerKey, type StowPos } from "../ship/stow.ts";
+import { resolvedStow, type StowIssue } from "../ship/segregation.ts";
 import type { BaplieBox, BapliePlan } from "./types.ts";
 
 /** Conversion sheet: all reefers face aft, except bay 6 or 22 below (motors fwd). HAN+RFF overrides. */
@@ -58,7 +58,7 @@ function dgSpots(lines: LineResult[], plan: BapliePlan | null): DgSpot[] {
   const seen = new Set<string>();
   const onDcm = new Set<string>();
   for (const line of lines) {
-    const stow = parseStow(line.input.stowLoc);
+    const stow = resolvedStow(line, plan);
     if (!stow) continue;
     const container = containerKey(line.input.container) || `row-${line.input.rowIndex}`;
     if (containerKey(line.input.container)) onDcm.add(container);
@@ -92,7 +92,6 @@ function dgSpots(lines: LineResult[], plan: BapliePlan | null): DgSpot[] {
 
 export function reeferHeatIssues(lines: LineResult[], plan: BapliePlan | null): StowIssue[] {
   if (!plan) return [];
-  applyPlanStow(lines, plan);
   const reefers = plan.boxes.filter((b) => b.reefer && b.operating && b.stow);
   const dgs = dgSpots(lines, plan);
   const issues: StowIssue[] = [];
@@ -135,6 +134,29 @@ export function countReefers(plan: BapliePlan | null, hatch?: number): number {
 export function countBoxes(plan: BapliePlan | null, hatch?: number): number {
   if (!plan) return 0;
   return plan.boxes.filter((b) => hatch == null || b.stow?.hatch === hatch).length;
+}
+
+/** Unique containers that carry DG — DCM lines plus BAPLIE DGS. */
+export function countDangerous(
+  lines: LineResult[],
+  plan: BapliePlan | null,
+  hatch?: number,
+): number {
+  const keys = new Set<string>();
+  for (const line of lines) {
+    if (!line.un) continue;
+    const stow = resolvedStow(line, plan);
+    if (hatch != null && stow?.hatch !== hatch) continue;
+    keys.add(containerKey(line.input.container) || `row-${line.input.rowIndex}`);
+  }
+  if (plan) {
+    for (const box of plan.boxes) {
+      if (!box.dg.length) continue;
+      if (hatch != null && box.stow?.hatch !== hatch) continue;
+      keys.add(containerKey(box.container) || box.container.toUpperCase());
+    }
+  }
+  return keys.size;
 }
 
 export function motorsNote(box: BaplieBox): string {

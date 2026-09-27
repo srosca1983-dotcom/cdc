@@ -1,10 +1,10 @@
 import { o as __toESM, r as __exportAll } from "../_runtime.mjs";
 import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].mjs";
 import { I as require_jsx_runtime, _ as useRouter, f as createRouter, g as createRootRoute, h as createFileRoute, l as Scripts, m as lazyRouteComponent, p as Outlet, u as HeadContent } from "../_libs/@tanstack/react-router+[...].mjs";
-import { n as TriangleAlert } from "../_libs/lucide-react.mjs";
+import { o as TriangleAlert } from "../_libs/lucide-react.mjs";
 import { a as union, i as string, n as number, r as object, t as literal } from "../_libs/zod.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/router-SJKvELHk.js
-var router_SJKvELHk_exports = /* @__PURE__ */ __exportAll({ getRouter: () => getRouter });
+//#region node_modules/.nitro/vite/services/ssr/assets/router-D0l97R49.js
+var router_D0l97R49_exports = /* @__PURE__ */ __exportAll({ getRouter: () => getRouter });
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function AppErrorComponent({ error }) {
@@ -273,8 +273,8 @@ function PreviewHostBridge() {
 	}, [router]);
 	return null;
 }
-var styles_default = "/assets/styles-Bm5-zkPW.css";
-var APP_NAME = "CDC eNOAD Screener";
+var styles_default = "/assets/styles-Dmgrgsqh.css";
+var APP_NAME = "Cargo and DCM Viewer";
 var Route$1 = createRootRoute({
 	head: () => ({
 		meta: [
@@ -286,7 +286,7 @@ var Route$1 = createRootRoute({
 			{ title: APP_NAME },
 			{
 				name: "description",
-				content: "Screen a dangerous cargo manifest against 33 CFR 160.202 Certain Dangerous Cargo rules for USCG eNOAD reporting."
+				content: "Screen a container-ship DCM and optional BAPLIE: CDC for eNOAD, stow, and everything that can go wrong with dangerous cargo."
 			},
 			{
 				name: "theme-color",
@@ -340,7 +340,7 @@ var Route$1 = createRootRoute({
 		})]
 	})
 });
-var $$splitComponentImporter = () => import("./routes-CxJ4Je3u.mjs").then((n) => n.t);
+var $$splitComponentImporter = () => import("./routes-6DrTvN-p.mjs").then((n) => n.t);
 var rootRouteChildren = { IndexRoute: createFileRoute("/")({ component: lazyRouteComponent($$splitComponentImporter, "component") }).update({
 	id: "/",
 	path: "/",
@@ -354,4 +354,4 @@ function getRouter() {
 	});
 }
 //#endregion
-export { getRouter, router_SJKvELHk_exports as t };
+export { getRouter, router_D0l97R49_exports as t };

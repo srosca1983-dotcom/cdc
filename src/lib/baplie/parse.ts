@@ -44,9 +44,27 @@ function parseUna(text: string): { rest: string; data: string; comp: string; rel
   return { rest: text, comp: ":", data: "+", rel: "?", term: "'" };
 }
 
-function isoReefer(iso?: string): boolean {
+/**
+ * ISO 6346 reefer equipment:
+ * - 3rd character R (22R1, 45R1, L5R1)
+ * - 1984 numeric type 30–34 (2230, 4531, 4532)
+ * - bare RF / R
+ */
+export function isoReefer(iso?: string): boolean {
   if (!iso) return false;
-  return /^\d{2}R/i.test(iso) || /^[A-Z][0-9]R/i.test(iso);
+  const s = iso.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (s.length < 1) return false;
+  if (s === "R" || s === "RF" || s.startsWith("REEFER")) return true;
+  if (s.length >= 3 && s[2] === "R") return true;
+  if (s.length >= 4 && /^\d{4}/.test(s) && s[2] === "3" && s[3] >= "0" && s[3] <= "4") return true;
+  return false;
+}
+
+function looksLikeIso(token: string): boolean {
+  const s = token.trim().toUpperCase();
+  if (!/^[A-Z0-9]{3,4}$/.test(s)) return false;
+  if (/^(6346|102|139|5)$/.test(s)) return false;
+  return true;
 }
 
 function toC(value: string, unit: string): number | null {
@@ -148,10 +166,29 @@ export function parseBaplie(text: string, filename = "baplie.edi"): BapliePlan {
   let cur: BaplieBox | null = null;
   let pending: { raw: string; stow: ReturnType<typeof parseStow> } | null = null;
   let pendingForNextEqd = false;
+  let pendingTmp: number | null | undefined;
+  let pendingHan: string | null = null;
   let hanMotors: "aft" | "fwd" | null = null;
+  let groupPol: string | undefined;
+  let groupPod: string | undefined;
+  let groupTs: string | undefined;
+  let groupFinal: string | undefined;
+
+  const applyHan = (box: BaplieBox, code: string) => {
+    box.han = code;
+    if (/^RF/.test(code) || /REEFER/.test(code)) box.reefer = true;
+    if (/^RFF/.test(code) || /FWD|FORWARD/.test(code)) hanMotors = "fwd";
+    if (/^RFA/.test(code) || /^RFB/.test(code) || /\bAFT\b/.test(code)) hanMotors = "aft";
+  };
 
   const flush = () => {
     if (!cur?.container) return;
+    if (!cur.pol && groupPol) cur.pol = groupPol;
+    if (!cur.pod && groupPod) cur.pod = groupPod;
+    if (!cur.transship && groupTs) cur.transship = groupTs;
+    if (!cur.finalPod && groupFinal) cur.finalPod = groupFinal;
+    if (!cur.pod && groupTs) cur.pod = groupTs;
+    if (!cur.pod && groupFinal) cur.pod = groupFinal;
     if (isoReefer(cur.iso)) cur.reefer = true;
     if (cur.tempC != null) cur.reefer = true;
     if (cur.full === false) cur.operating = false;
@@ -188,25 +225,47 @@ export function parseBaplie(text: string, filename = "baplie.edi"): BapliePlan {
         } else {
           pendingForNextEqd = true;
         }
-      } else if (q === "9" && cur && code) cur.pol = code;
-      else if (q === "11" && cur && code) cur.pod = code;
-      else if (q === "12" && cur && code) {
-        cur.transship = code;
-        if (!cur.pod) cur.pod = code;
-      } else if (q === "83" && cur && code) {
-        cur.finalPod = code;
-        if (!cur.pod) cur.pod = code;
+      } else if (q === "9" && code) {
+        groupPol = code;
+        if (cur) cur.pol = code;
+      } else if (q === "11" && code) {
+        groupPod = code;
+        if (cur) cur.pod = code;
+      } else if (q === "12" && code) {
+        groupTs = code;
+        if (cur) {
+          cur.transship = code;
+          if (!cur.pod) cur.pod = code;
+        }
+      } else if (q === "83" && code) {
+        groupFinal = code;
+        if (cur) {
+          cur.finalPod = code;
+          if (!cur.pod) cur.pod = code;
+        }
       }
     } else if (tag === "EQD") {
       flush();
       cur = emptyBox();
-      cur.container = locCode(els[2] || "", una.comp, una.rel).replace(/\s+/g, "").toUpperCase();
+      const idParts = splitReleased(els[2] || "", una.comp, una.rel).map((p) => p.trim());
+      cur.container = (idParts[0] || "").replace(/\s+/g, "").toUpperCase();
       const iso = locCode(els[3] || "", una.comp, una.rel);
       if (iso) cur.iso = iso.toUpperCase();
+      else if (idParts[1] && looksLikeIso(idParts[1])) cur.iso = idParts[1].toUpperCase();
       const full = (els[6] || "").trim() || (els[5] || "").trim();
       if (full === "5") cur.full = true;
       if (full === "4") cur.full = false;
       if (pendingForNextEqd && pending) applyStow(cur, pending.raw, parseStow(pending.raw, cur.iso));
+      if (pendingTmp !== undefined) {
+        cur.tempC = pendingTmp;
+        cur.reefer = true;
+        cur.operating = cur.full !== false;
+        pendingTmp = undefined;
+      }
+      if (pendingHan) {
+        applyHan(cur, pendingHan);
+        pendingHan = null;
+      }
     } else if (tag === "MEA" && cur) {
       const joined = els.join(una.data);
       const m = joined.match(/KGM[:\+]?(\d+(?:\.\d+)?)/i) || joined.match(/LBR[:\+]?(\d+(?:\.\d+)?)/i);
@@ -214,16 +273,20 @@ export function parseBaplie(text: string, filename = "baplie.edi"): BapliePlan {
         const n = Number(m[1]);
         cur.weightKg = /LBR/i.test(m[0]) ? n * 0.453592 : n;
       }
-    } else if (tag === "TMP" && cur) {
+    } else if (tag === "TMP") {
       const valParts = splitReleased(els[2] || "", una.comp, una.rel);
-      cur.tempC = toC(valParts[0] || "", valParts[1] || "");
-      cur.reefer = true;
-      cur.operating = cur.full !== false;
-    } else if (tag === "HAN" && cur) {
+      const tempC = toC(valParts[0] || "", valParts[1] || "");
+      if (cur) {
+        cur.tempC = tempC;
+        cur.reefer = true;
+        cur.operating = cur.full !== false;
+      } else {
+        pendingTmp = tempC;
+      }
+    } else if (tag === "HAN") {
       const code = locCode(els[1] || "", una.comp, una.rel).toUpperCase();
-      cur.han = code;
-      if (/^RFF/.test(code) || /FWD|FORWARD/.test(code)) hanMotors = "fwd";
-      if (/^RFA/.test(code) || /^RFB/.test(code) || /\bAFT\b/.test(code)) hanMotors = "aft";
+      if (cur) applyHan(cur, code);
+      else pendingHan = code;
     } else if (tag === "DGS" && cur) {
       cur.dg.push(parseDgs(els, una.comp, una.rel));
     } else if (tag === "FTX" && cur) {

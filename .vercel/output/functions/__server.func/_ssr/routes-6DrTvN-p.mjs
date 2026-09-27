@@ -1,11 +1,11 @@
 import { o as __toESM } from "../_runtime.mjs";
 import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].mjs";
 import { I as require_jsx_runtime } from "../_libs/@tanstack/react-router+[...].mjs";
-import { a as Mail, c as Flame, d as Eraser, f as Download, g as Anchor, h as ArrowLeft, i as Search, l as FileText, m as Check, o as History, p as ClipboardCopy, r as Shield, s as GitCompare, t as Upload, u as FileSpreadsheet } from "../_libs/lucide-react.mjs";
+import { C as Check, S as ClipboardCopy, T as Anchor, _ as FileWarning, a as Upload, b as Download, c as Shield, d as Radio, f as MapPin, g as Flame, h as GitCompare, i as Waves, l as Ship, m as History, n as X, o as TriangleAlert, p as Mail, r as Wind, s as ThermometerSun, t as Zap, u as Search, v as Eraser, w as ArrowLeft, x as DoorOpen, y as Droplets } from "../_libs/lucide-react.mjs";
 import { t as Slot } from "../_libs/radix-ui__react-slot.mjs";
 import { n as clsx, t as cva } from "../_libs/class-variance-authority+clsx.mjs";
 import { t as twMerge } from "../_libs/tailwind-merge.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/routes-CxJ4Je3u.js
+//#region node_modules/.nitro/vite/services/ssr/assets/routes-6DrTvN-p.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 var __defProp = Object.defineProperty;
@@ -61,13 +61,7 @@ var DECK_ROWS_H10 = [
 	11
 ];
 /** Inboard cells next to the Hatch 10 engine casing (not the whole cover). */
-var CASING_ROWS_H10 = [
-	0,
-	1,
-	2,
-	3,
-	4
-];
+var CASING_ROWS_H10 = [4, 3];
 /** Every hold: 7 across with CL 0. */
 var HOLD_ROWS_7 = [
 	6,
@@ -287,12 +281,49 @@ function rowsPortToStbd(rows) {
 		...odd
 	];
 }
-function deckRowsFor(spec, occupied = []) {
-	return rowsPortToStbd([...spec.deckRowIds, ...occupied]);
+/** Real cover cells only — never invent Hatch 10 rows 0/1/2 or Hatch 9 hold. */
+function deckRowsFor(spec, _occupied = []) {
+	return rowsPortToStbd([...spec.deckRowIds]);
 }
-function holdRowsFor(spec, occupied = []) {
-	if (!spec.holdRowIds.length && !occupied.length) return [];
-	return rowsPortToStbd([...spec.holdRowIds, ...occupied]);
+function holdRowsFor(spec, _occupied = []) {
+	if (!spec.holdRowIds.length) return [];
+	return rowsPortToStbd([...spec.holdRowIds]);
+}
+function isRealRow(spec, onDeck, row) {
+	return (onDeck ? spec.deckRowIds : spec.holdRowIds).includes(row);
+}
+/** Deck tiers start at 82 (1st on deck). 90/92 only when a box is actually there. */
+function deckTiersFor(spec, occupied = []) {
+	const tiers = [];
+	for (let i = 0; i < spec.onDeckTiers; i++) {
+		const t = 82 + 2 * i;
+		if (t >= 90) continue;
+		tiers.push(t);
+	}
+	for (const t of occupied) if ((t === 90 || t === 92) && !tiers.includes(t)) tiers.push(t);
+	return tiers.sort((a, b) => a - b);
+}
+/** Hold tiers start at 02. Hatch 9 is empty; Hatch 12 is four (02/04/06/08). */
+function holdTiersFor(spec) {
+	if (!spec.holdTiers) return [];
+	const tiers = [];
+	for (let i = 0; i < spec.holdTiers; i++) tiers.push(2 + 2 * i);
+	return tiers;
+}
+/** Bays a box actually occupies. A 40' takes the whole 20'/40'/20' triple. */
+function occupiedBays(stow, spec) {
+	const h = spec ?? hatchSpec(stow.hatch);
+	if (!h) return [stow.bay];
+	if (stow.fortyFoot) return [...h.bays];
+	return [stow.bay];
+}
+/** True when the 20'/40' footprints share a bay on the same hatch. */
+function sameBayColumn(a, b) {
+	if (a.hatch !== b.hatch) return false;
+	const spec = hatchSpec(a.hatch);
+	const oa = occupiedBays(a, spec);
+	const ob = occupiedBays(b, spec);
+	return oa.some((bay) => ob.includes(bay));
 }
 /** How many cells apart on the hatch line (port→stbd). 0 = same cell, 1 = neighbors. */
 function athwartGap(hatchId, onDeck, rowA, rowB) {
@@ -325,7 +356,6 @@ var SHIP_NOTES = [
 /** GEORGE II stowage from the Bay-Hatch conversion sheet and Pasha DCM. */
 function hatchFromBay(bay) {
 	for (let i = 0; i < BAYS_BY_HATCH.length; i++) if (BAYS_BY_HATCH[i].includes(bay)) return i + 1;
-	if (bay >= 1 && bay <= 47) return Math.min(12, Math.max(1, Math.ceil(bay / 4)));
 	return 0;
 }
 function partsFrom(raw) {
@@ -375,6 +405,17 @@ function parseStow(raw, iso) {
 		hatch,
 		fortyFoot: fromIso ?? bay % 2 === 0
 	};
+}
+/** Container number for maps: A-Z0-9 only, upper case. */
+function containerKey(id) {
+	return (id || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+function stowEqual(a, b) {
+	if (!a || !b) return false;
+	return a.bay === b.bay && a.row === b.row && a.tier === b.tier;
+}
+function formatStowRaw(pos) {
+	return `${String(pos.bay).padStart(3, "0")}${String(pos.row).padStart(2, "0")}${String(pos.tier).padStart(2, "0")}`;
 }
 /** Prefer a 6–7 digit stow token, or bay-row-tier like 14-08-84. */
 function stowFromRowText(text) {
@@ -2181,7 +2222,7 @@ function evaluateSingle(partial) {
 		residueMode: partial.residueMode ?? false
 	}).lines[0];
 }
-function starts(line, re) {
+function starts$1(line, re) {
 	return re.test((line.hazClass || "").replace(/\s+/g, "")) || re.test((line.input.subsidiary || "").replace(/\s+/g, ""));
 }
 /**
@@ -2220,17 +2261,17 @@ function categoryScan(result) {
 		};
 	}
 	return [
-		item("p1", "1.1 / 1.2 explosives", (l) => starts(l, /^1\.[12]/), "{n} on board — still CDC at any qty (check class)"),
-		item("p2", "1.5D (176.415 permit)", (l) => starts(l, /^1\.5D/) || l.paragraphs.includes("160.202(2)"), "{n} on board, not in combustible bags"),
-		item("p3", "2.3 PIH gas > 1 MT", (l) => starts(l, /^2\.3/) || l.paragraphs.includes("160.202(3)"), "{n} on board, vessel total ≤ 1 MT"),
+		item("p1", "1.1 / 1.2 explosives", (l) => starts$1(l, /^1\.[12]/), "{n} on board — still CDC at any qty (check class)"),
+		item("p2", "1.5D (176.415 permit)", (l) => starts$1(l, /^1\.5D/) || l.paragraphs.includes("160.202(2)"), "{n} on board, not in combustible bags"),
+		item("p3", "2.3 PIH gas > 1 MT", (l) => starts$1(l, /^2\.3/) || l.paragraphs.includes("160.202(3)"), "{n} on board, vessel total ≤ 1 MT"),
 		item("p4", "5.1 ammonium nitrate", (l) => l.paragraphs.includes("160.202(4)") || l.paragraphs.includes("160.202(9)") || [
 			"1942",
 			"2067",
 			"2426",
 			"3375"
 		].includes(l.un), "{n} on board, no 176.415 permit case"),
-		item("p5", "6.1 PIH tank or > 20 MT", (l) => starts(l, /^6\.1/) || l.paragraphs.includes("160.202(5)"), "{n} packaged line(s) under 20 MT — not CDC"),
-		item("p6", "Class 7 HRCQ / fissile", (l) => starts(l, /^7/) || l.paragraphs.includes("160.202(6)"), "{n} on board, not HRCQ / excepted package"),
+		item("p5", "6.1 PIH tank or > 20 MT", (l) => starts$1(l, /^6\.1/) || l.paragraphs.includes("160.202(5)"), "{n} packaged line(s) under 20 MT — not CDC"),
+		item("p6", "Class 7 HRCQ / fissile", (l) => starts$1(l, /^7/) || l.paragraphs.includes("160.202(6)"), "{n} on board, not HRCQ / excepted package"),
 		item("p7", "Bulk liquefied gas", (l) => l.paragraphs.includes("160.202(7)"), "{n} — not ship's-tank cargo"),
 		item("p8", "Named bulk liquids", (l) => l.paragraphs.includes("160.202(8)") || [
 			"1098",
@@ -2265,21 +2306,32 @@ function routeLine(voyage) {
 }
 var GENERAL_CARGO_LINE = "GENERAL CARGO (other than CDC): CONTAINERIZED";
 var NO_CDC_PASTE = `${GENERAL_CARGO_LINE}\nCDC CARRIED: NO`;
-/** 33 CFR 160.206 (3) cargo fields for NVMC eNOAD. */
+function classOnLine(line) {
+	const c = (line.hazClass || "").trim() || "—";
+	const s = (line.input.subsidiary || "").trim();
+	if (s && !c.includes("(")) return `${c} (${s})`;
+	return c;
+}
+/** 33 CFR 160.206 (3) cargo fields for NVMC eNOAD, plus class / container / stow / residue. */
 function enoadPasteBlock(result) {
-	if (result.enoad.length === 0) return NO_CDC_PASTE;
+	const rows = result.lines.filter((l) => l.verdict === "CDC" || l.verdict === "CDC_RESIDUE");
+	if (rows.length === 0) return NO_CDC_PASTE;
 	return [
 		GENERAL_CARGO_LINE,
 		"CDC CARRIED: YES",
 		"",
-		...result.enoad.map((e) => {
-			const amount = e.amountLabel && e.amountLabel !== "—" ? e.amountLabel : "AMOUNT NOT ON MANIFEST — CONFIRM";
+		rows.map((l) => {
+			const amount = l.quantityKg === null || !Number.isFinite(l.quantityKg) ? "AMOUNT NOT ON MANIFEST — CONFIRM" : formatKg(l.quantityKg);
 			return [
-				`NAME: ${e.name.toUpperCase()}`,
-				`UN NUMBER: ${e.un}`,
-				`AMOUNT: ${amount}`
+				`NAME: ${(l.catalogName || l.name).toUpperCase()}`,
+				`UN NUMBER: ${l.un}`,
+				`CLASS: ${classOnLine(l)}`,
+				`AMOUNT: ${amount}`,
+				`CONTAINER: ${clean(l.input.container) || "NOT ON MANIFEST"}`,
+				`STOW: ${clean(l.input.stowLoc) || "NOT ON MANIFEST"}`,
+				`RESIDUE: ${l.verdict === "CDC_RESIDUE" ? "YES" : "NO"}`
 			].join("\n");
-		})
+		}).join("\n\n")
 	].join("\n");
 }
 function reviewNotes(result) {
@@ -2404,11 +2456,11 @@ function decodeText(data) {
 async function ingestBuffer(data, filename, onProgress) {
 	const name = (filename || "manifest").toLowerCase();
 	if (name.endsWith(".pdf")) {
-		const { parsePdfArrayBuffer } = await import("./pdf-C9WpndU0.mjs");
+		const { parsePdfArrayBuffer } = await import("./pdf-394uYjpl.mjs");
 		return parsePdfArrayBuffer(data, filename, onProgress);
 	}
 	if (name.endsWith(".xlsx") || name.endsWith(".xls") || name.endsWith(".xlsm")) {
-		const { parseXlsxArrayBuffer } = await import("./xlsx-BAKMt8MP.mjs");
+		const { parseXlsxArrayBuffer } = await import("./xlsx-CQI5AGJi.mjs");
 		return parseXlsxArrayBuffer(data, filename);
 	}
 	if (name.endsWith(".doc") || name.endsWith(".docx")) {
@@ -2591,32 +2643,8 @@ var RULE_CARDS = [
 		commonMiss: "Containerized bags of UN 1942 are a permit test, not a bulk-solid CDC. Residue is not 'whatever is left' — the 1,000 lb cap is in the definition."
 	}
 ];
-var ENOAD_BLURB = "Paste the boxed block into an email to the Master, then into the NVMC eNOAD cargo section. Table 160.206 (3)(i) is general cargo other than CDC (CONTAINERIZED). (3)(ii)–(iii) are name, UN number, and amount of each Certain Dangerous Cargo. If nothing qualifies: CDC CARRIED: NO.";
-var DISCLAIMER = "Screening aid for container-ship cargo based on 33 CFR 160.202 and the permit rule in 49 CFR 176.415. It is not a Coast Guard determination, not legal advice, and not a substitute for the IMDG Code, 49 CFR, or the shipping papers. Prefer the Excel DCM over the printed PDF when both exist. If you are not sure, report it.";
-var WORKED_SAMPLE = `UN/NA NO	Proper Shipping Name	HAZ Class	Packaging	Net Qty
-3480	LITHIUM ION BATTERIES	9	BOX	2400 kg
-1049	HYDROGEN, COMPRESSED	2.1	CYL	80 kg
-3265	CORROSIVE LIQUID, ACIDIC, ORGANIC, N.O.S.	8	BOX	500 kg
-1005	AMMONIA, ANHYDROUS	2.3	PORTABLE TANK	18000 kg
-2910	RADIOACTIVE MATERIAL, EXCEPTED PACKAGE	7	BOX	12 kg
-1992	FLAMMABLE LIQUID, TOXIC, N.O.S.	3	TANK	20000 kg
-1942	AMMONIUM NITRATE	5.1	BAG	25000 kg
-0081	EXPLOSIVE, BLASTING, TYPE A	1.1D	BOX	400 kg
-1017	CHLORINE	2.3	CYL	50 kg
-1098	ALLYL ALCOHOL	6.1	PORTABLE TANK	5000 kg
-1280	PROPYLENE OXIDE	3	TANK	12000 kg
-0332	EXPLOSIVE, BLASTING, TYPE E	1.5D	BAG	800 kg
-2916	RADIOACTIVE MATERIAL, TYPE B(U) PACKAGE	7	BOX	1 kg
-1831	SULFURIC ACID, FUMING	8	DRUM	200 kg
-1079	SULFUR DIOXIDE	2.3	CYL	400 kg`;
-/** Combined-cell Pasha DCM style (container ship, pounds). */
-var PASHA_SAMPLE = `UN/NA NO - Shipping Name - Hazardous Class - Packing Group	Technical Name	Limited QTY	Weight Lbs	Packaging	Container	Booking
-UN3082,ENVIRONMENTALLY HAZARDOUS SUBSTANCE, LIQUID, N.O.S., 9,III	(CONTAINS: EPOXY RESIN)		265	10 CN	PGHU4013587	3606910301
-UN3480,LITHIUM ION BATTERIES, 9,			3795	3 PLTS	PGHU4013587	3606910301
-UN1954,COMPRESSED GAS, FLAMMABLE, N.O.S., 2.1,	(HYDROGEN, NITROGEN)		495	7 CY	PGHU4010335	3606910301
-UN2810,TOXIC LIQUIDS, ORGANIC, N.O.S., 6.1,III	(3-OXA-1-HEPTANOL)		5.5	1 CN	PGHU4508204	3606910871
-UN1263,PAINT, 3,II		Ltd Qty	0.1	1 TO	PGHU4011840	3606910973
-UN3085,OXIDIZING SOLID, CORROSIVE, N.O.S., 5.1(8),II	(1-BROMO-3-CHLORO-5,5-DIMETHYLHYDANTOIN)		3	1 CN	PGHU4508204	3606910871`;
+var ENOAD_BLURB = "Paste the boxed block into an email to the Master, then into the NVMC eNOAD cargo section. Table 160.206 (3) is CONTAINERIZED general cargo plus NAME / UN / AMOUNT for each Certain Dangerous Cargo. The packet also carries class, kg, container, stow and residue. If nothing qualifies: CDC CARRIED: NO.";
+var DISCLAIMER = "Screening aid for container-ship cargo based on 33 CFR 160.202, the permit rule in 49 CFR 176.415, the IMDG Code, and GEORGE II’s CSM. It is not a Coast Guard determination, not legal advice, and not a substitute for the IMDG Code, 49 CFR, EmS, SDS, or the shipping papers. Prefer the Excel DCM over the printed PDF when both exist. If you are not sure, report it.";
 var KEY$1 = "cdc-enoad-log-v1";
 var MAX = 12;
 function read() {
@@ -2662,6 +2690,12 @@ function saveCargo(entry) {
 		window.localStorage.setItem(CARGO_KEY, JSON.stringify(entry));
 	} catch {}
 }
+function clearCargo() {
+	if (typeof window === "undefined") return;
+	try {
+		window.localStorage.removeItem(CARGO_KEY);
+	} catch {}
+}
 function loadCargo() {
 	if (typeof window === "undefined") return null;
 	try {
@@ -2669,10 +2703,18 @@ function loadCargo() {
 		if (!raw) return null;
 		const parsed = JSON.parse(raw);
 		if (!parsed?.lines?.length) return null;
+		if (isDemoSource(parsed.sourceName)) {
+			window.localStorage.removeItem(CARGO_KEY);
+			return null;
+		}
 		return parsed;
 	} catch {
 		return null;
 	}
+}
+/** Old in-app sample files — not a real voyage. */
+function isDemoSource(name) {
+	return /pasha-style-sample|worked-cdc-example|sample-george-ii/i.test(name || "");
 }
 function inputOf(line) {
 	return "input" in line ? line.input : line;
@@ -2690,38 +2732,15 @@ function blobOf(input) {
 		...input.raw || []
 	].join(" ");
 }
-function packageCount(pkg) {
-	const m = pkg.trim().match(/^(\d+(?:\.\d+)?)\s+/);
-	const n = m ? Number(m[1]) : 1;
-	return Number.isFinite(n) && n > 0 ? n : 1;
-}
-function kgPerPackage(input) {
-	if (input.quantityKg == null) return null;
-	return input.quantityKg / packageCount(input.packaging || "");
-}
 function bulkOrCylinder(pkg) {
 	return /\b(TK|TNK|TANK|TOTE|IBC|CYL(?:INDER)?S?|CY\b|PLTS?|PALLETS?|DRUMS?|DRM)\b/i.test(pkg);
 }
-/** Hardware-store class 2 inner packagings (aerosol cartons, lighter/cartridge CN). */
-function consumerClass2Package(input) {
-	const pkg = input.packaging || "";
-	if (bulkOrCylinder(pkg)) return false;
-	if (/\b(CN|CTN|CARTONS?|CANS?|BX|BOXES|BOX)\b/i.test(pkg)) return true;
-	const kg = input.quantityKg;
-	if (/\b(CS|CASES?)\b/i.test(pkg) && kg != null && kg < 25) return true;
-	if (!pkg.trim() && kg != null && kg < 25) return true;
-	return false;
-}
-function hasExplicitLqMarks(lines) {
-	return lines.some((line) => {
-		const input = inputOf(line);
-		return Boolean(input.limitedQty) || textSaysLimitedQty(blobOf(input));
-	});
-}
 /**
 * IMDG 3.4 / 49 CFR 173.27 limited (and excepted) quantity.
-* CargoMax uses the DCM Limited QTY column. When that column is missing
-* (printed HAZ PDF) pass cartonFallback so CN/CARTON lots still count as LQ.
+* CargoMax uses the DCM Limited QTY column. Do not infer LQ for a whole
+* printed PDF just because it has no Limited QTY column.
+*
+* cartonFallback is opt-in only (default false). Production screens pass false.
 */
 function isLimitedQty(line, cartonFallback = false) {
 	const input = inputOf(line);
@@ -2733,15 +2752,69 @@ function isLimitedQty(line, cartonFallback = false) {
 	if (NEVER_LQ_UN.test(un)) return false;
 	if (/^1/.test(cls) || /^5\.2/.test(cls) || /^6\.2/.test(cls) || /^7/.test(cls) || /^2\.3/.test(cls)) return false;
 	if (un === "1950" && !bulkOrCylinder(pkg)) return true;
-	if (/^2/.test(cls) && consumerClass2Package(input)) return true;
 	if (cartonFallback) {
 		if (bulkOrCylinder(pkg)) return false;
 		if (/\b(CN|CTN|CARTONS?|CANS?|BX|BOXES|BOX)\b/i.test(pkg) || !pkg.trim()) {
-			const per = kgPerPackage(input);
+			const n = input.quantityKg;
+			const countMatch = (pkg || "").trim().match(/^(\d+(?:\.\d+)?)\s+/);
+			const count = countMatch ? Number(countMatch[1]) : 1;
+			const per = n == null ? null : n / (Number.isFinite(count) && count > 0 ? count : 1);
 			if (per == null || per < 30) return true;
 		}
 	}
 	return false;
+}
+function sheetSections(sheet) {
+	return [
+		{
+			title: "Hazards",
+			items: sheet.hazards
+		},
+		{
+			title: "Fire",
+			items: sheet.fire
+		},
+		{
+			title: "Spill / leak",
+			items: sheet.spill
+		},
+		{
+			title: "Explosion",
+			items: sheet.explosion ?? []
+		},
+		{
+			title: "Toxic vapor / asphyxiation",
+			items: sheet.vapor ?? []
+		},
+		{
+			title: "Water / wetting",
+			items: sheet.wetting ?? []
+		},
+		{
+			title: "Hold / confined space",
+			items: sheet.hold ?? []
+		},
+		{
+			title: "Lost overboard",
+			items: sheet.overboard ?? []
+		},
+		{
+			title: "Pollution",
+			items: sheet.pollution ?? []
+		},
+		{
+			title: "PPE",
+			items: sheet.ppe
+		},
+		{
+			title: "First aid",
+			items: sheet.firstAid
+		},
+		{
+			title: "On GEORGE II",
+			items: sheet.ship
+		}
+	].filter((s) => s.items.length > 0);
 }
 var CLASS_SHEETS = {
 	"1": {
@@ -2752,6 +2825,10 @@ var CLASS_SHEETS = {
 		hazards: ["Mass explosion or projection hazard.", "Fire may cause containers to explode."],
 		fire: ["If the cargo is not burning: fight from the best cover, copious water on adjacent boxes.", "If explosives are involved in fire: withdraw. Do not fight. Cool nearby cargo from a distance."],
 		spill: ["Do not touch damaged packages.", "Keep ignition sources away. Notify the Master and the DG locker."],
+		explosion: ["1.1/1.2: mass explosion. 1.3: fireball / projection. 1.4: mostly fire and fragments.", "A box in a stack fire is the one you walk away from. Do not open it to 'check'."],
+		vapor: ["Post-blast and fire smoke is toxic. Upwind. SCBA."],
+		hold: ["Class 1.1–1.6 is on-deck only on GEORGE II. 1.4S may go in Hold 2. A hold of explosives on fire is abandon-ship territory."],
+		overboard: ["A lost class 1 box is a notification and an exclusion-zone problem. Do not send a boat crew onto it."],
 		ppe: ["Full fire kit if you must approach. SCBA."],
 		firstAid: ["Blast / fragment injuries — treat as trauma. Move upwind of smoke."],
 		ship: ["On GEORGE II, class 1.1–1.6 is on-deck only. 1.4S may go in Hold 2."]
@@ -2764,6 +2841,11 @@ var CLASS_SHEETS = {
 		hazards: ["Extremely flammable. Vapor can travel and flash back.", "BLEVE if a tank is fire-impaged."],
 		fire: ["Do not extinguish a leaking gas fire unless the leak can be stopped.", "Water spray to cool the container. Withdraw if the tank discolors or vents rise."],
 		spill: ["Isolate. Eliminate ignition (no smoking, no non-rated radios in the plume).", "Ventilate. Vapor is heavier than air — check bilges, holds, and the house intakes."],
+		explosion: ["A tank in fire can BLEVE. If you cannot cool it, pull the team back.", "Aerosol cartons rocket. Do not stand in front of them."],
+		vapor: ["Heavier-than-air vapor in a hold or the house is a flash-fire and asphyxiation pair."],
+		hold: ["Gas-free before entry. Mechanical ventilation on Hold 2 is not a substitute for readings."],
+		overboard: ["A floating LPG tank is still a BLEVE problem for the boat that goes after it."],
+		pollution: ["Most 2.1 gases dissipate. The liquid pool on deck is the fire problem, not the sheen."],
 		ppe: ["SCBA. Fire kit. No bare skin on a liquid LPG leak (frostbite)."],
 		firstAid: ["Move to fresh air. Frostbite: warm water, do not rub. Burns: cool water."],
 		ship: ["On-deck or Hold 2 (Hatches 3 & 4). Residue last contained in a tank is still a leak/fire problem."]
@@ -2776,6 +2858,8 @@ var CLASS_SHEETS = {
 		hazards: ["Asphyxiation in a hold or house. Some support combustion."],
 		fire: ["Use an extinguisher suited to the surrounding cargo. Cool cylinders with water."],
 		spill: ["Ventilate. Do not enter a hold without atmosphere readings and SCBA."],
+		vapor: ["Oxygen-deficient atmosphere. Nitrogen, CO2, argon, and helium will drop you with no smell.", "Oxidizing 2.2 (oxygen, nitrous) will turn an ordinary fire into a torch. Keep combustibles off a leak."],
+		hold: ["Hold 2 is mechanically ventilated — still gas-free before entry. Empty uncleaned is still a gas."],
 		ppe: ["SCBA in any poorly ventilated space."],
 		firstAid: ["Fresh air. Oxygen if trained. Treat asphyxia."],
 		ship: ["Hold 2 is mechanically ventilated — still gas-free before entry."]
@@ -2788,6 +2872,11 @@ var CLASS_SHEETS = {
 		hazards: ["Poisonous by inhalation. Can be fatal in a hold or on deck in still air."],
 		fire: ["Cool from upwind with water. Do not get in the plume. Let it burn if the leak is the fuel."],
 		spill: ["Upwind, uphill. Isolate. SCBA only. Do not enter holds. Notify USCG if in port."],
+		explosion: ["Some 2.3 gases are also flammable. A 'toxic only' label does not make a BLEVE impossible."],
+		vapor: ["A cylinder bank on Hatch 1 will put the house in the plume on the wrong wind.", "No filter mask. No 'I'll just crack the door'. CDC if that UN’s ship total is over 1 MT."],
+		hold: ["Do not enter. Period. A 2.3 leak under deck is a stay-out and notify problem."],
+		overboard: ["A leaking 2.3 package in the water is still a downwind kill zone for a rescue boat."],
+		pollution: ["Notify. A PIH release in port is a COTP event, not a deck-wash."],
 		ppe: ["SCBA + chemical suit. No filter mask."],
 		firstAid: ["Fresh air. Do not mouth-to-mouth if inhalation poison. Medical help immediately."],
 		ship: ["CDC if the ship total of that UN is over 1 MT. Keep off the house intakes."]
@@ -2800,6 +2889,12 @@ var CLASS_SHEETS = {
 		hazards: ["Vapor + air = flash fire. Runoff can carry fire into a hold or scupper."],
 		fire: ["Foam or dry chemical on a pool. Water spray to cool boxes. Aqueous film-forming foam if you have it."],
 		spill: ["Stop the leak if you can do it without walking in it. Absorb. Keep out of scuppers if you can boom it."],
+		explosion: ["Vapor in a closed hold will flash. Cans and drums BLEVE/burst in a stack fire."],
+		vapor: ["Heavier-than-air solvent vapor on a still night sits on deck and in the house door sills."],
+		wetting: ["Water on a polar solvent (alcohol, acetone) can spread the fire. Foam is the tool."],
+		hold: ["FP < 23 °C in a hold: no hot work, gas-free before entry, charged hose on that bay."],
+		overboard: ["A lost paint box is a sheen and a harbor problem. Plug scuppers; do not pump it over."],
+		pollution: ["Most class 3 is a marine pollutant in practice once it hits the harbor. SOPEP."],
 		ppe: ["Gloves, eye protection. SCBA if the vapor is thick. No sparks."],
 		firstAid: ["Skin: soap and water. Eyes: 15 minutes of water. Inhalation: fresh air."],
 		ship: ["FP < 23 °C may go on deck or Hold 2. Keep ignition control on that hatch."]
@@ -2812,9 +2907,44 @@ var CLASS_SHEETS = {
 		hazards: ["Easy to ignite. Some burn fiercely once started."],
 		fire: ["Water, foam, or dry chemical depending on the SDS. Smother if water is the wrong tool."],
 		spill: ["Sweep carefully. Avoid making a dust cloud."],
+		explosion: ["Dust cloud + ignition = flash. Some 4.1 (desensitized explosives) get nastier as they dry."],
+		wetting: ["A few 4.1 are wetted to stay safe. If the box is leaking water, the solid may be waking up."],
+		hold: ["On-deck only on GEORGE II. Do not restow into a hold to 'get it out of the weather' without checking."],
 		ppe: ["Gloves, eye protection, dust mask or SCBA in a cloud."],
 		firstAid: ["Burns: cool water. Dust in eyes: rinse."],
 		ship: ["On-deck only on GEORGE II (not Hold 2)."]
+	},
+	"4.2": {
+		name: "Spontaneously combustible / self-heating",
+		guide: "ERG 136",
+		cls: "4.2",
+		looksLike: "May look like ordinary bags or drums. The tell is heat in a stack that has no outside flame.",
+		hazards: ["Can ignite without an external flame. Some react with air; some just heat in bulk."],
+		fire: ["Copious water from cover if the SDS allows it. Do not stir a decomposing package.", "A hold of 4.2 on fire may not be a fight you can win — cool adjacent cargo and get people out."],
+		spill: ["Do not leave a broken package to 'air out' on deck without a watch. Cover, isolate, SDS."],
+		explosion: ["Some self-heating cargoes run away to a fireball once they take off."],
+		wetting: ["Water is right for some and wrong for others. Read the SDS before you open the fire main on it."],
+		hold: ["A 4.2 that is heating in a hold is a stay-out. Ventilate from outside. No entry."],
+		ppe: ["SCBA, fire kit. Do not put a bare hand on a 'warm' bag."],
+		firstAid: ["Burns: cool water. Smoke: fresh air, medical — delayed lung injury is real."],
+		ship: ["Keep off live reefers. On-deck preferred. A warm box with a 4.2 label is already an incident."]
+	},
+	"4.3": {
+		name: "Dangerous when wet",
+		guide: "ERG 138",
+		cls: "4.3",
+		looksLike: "Drums or boxes. Often no smell until water hits it — then hydrogen or a toxic gas.",
+		hazards: ["Water (rain, fire main, hold flood, a holed box) makes flammable or toxic gas."],
+		fire: ["Do not put a straight stream on it unless the SDS says so. Dry powder / sand if that is the tool.", "If it is already in a fire and making gas, cool from cover and stay out of the plume."],
+		spill: ["Keep it dry. Cover. No deck wash. No hold bilge pumping onto it."],
+		explosion: ["Hydrogen off a wet 4.3 leak in a closed space will flash. Isolate ignition."],
+		vapor: ["Some 4.3 make toxic gas with water (phosphine, ammonia). SCBA. No filter mask."],
+		wetting: ["This is the casualty. Rain in a damaged roof, a leaking reefer drain, a fire-main test, a flooded hold.", "Know which hatch before the weather turns. Do not stow 4.3 in a hold that has a known leak."],
+		hold: ["A flooded hold with 4.3 in it is a gas-and-fire problem. Nobody in until it is proven dry and gas-free."],
+		overboard: ["In the water it will keep making gas. Exclusion zone. Notify."],
+		ppe: ["SCBA. Keep skin dry. Fire kit if it has ignited."],
+		firstAid: ["Fresh air. Burns: cool water. Do not use water on a still-reacting residue on the skin — brush off first."],
+		ship: ["On-deck only on GEORGE II. Keep off the scuppers and off any hatch that takes green water."]
 	},
 	"5.1": {
 		name: "Oxidizer",
@@ -2824,9 +2954,28 @@ var CLASS_SHEETS = {
 		hazards: ["Feeds a fire. Contamination with oil or combustibles can make it explosive."],
 		fire: ["Flood with water. Do not use dry chemical or foam as the only tool. Cool adjacent cargo."],
 		spill: ["Keep combustibles off it. Sweep dry material. Do not mix with fuels or oils."],
+		explosion: ["Ammonium nitrate contaminated with oil, or in a hold fire you cannot flood, is the Texas City problem.", "Pool shock and chlorinated oxidizers with acids make chlorine gas."],
+		vapor: ["Decomposition smoke is NOx — brown/orange, delayed lung injury. SCBA."],
+		wetting: ["Keep AN dry and uncontaminated. A wet, oil-stained bag is worse, not better."],
+		hold: ["On-deck only on GEORGE II. Do not put bagged AN in a hold to get it out of the rain."],
+		pollution: ["Nitrates in the harbor are a report, not a deck wash."],
 		ppe: ["Gloves, eye protection. SCBA in decomposition smoke (toxic NOx)."],
 		firstAid: ["Skin/eyes: water. Inhalation of NOx: medical help — symptoms can be delayed."],
 		ship: ["On-deck only. Ammonium nitrate in bags is a CDC conversation if a permit is required."]
+	},
+	"5.2": {
+		name: "Organic peroxide",
+		guide: "ERG 145",
+		cls: "5.2",
+		looksLike: "Often temperature-controlled. May be labeled 'keep refrigerated'. A runaway pack hisses, heats, then vents.",
+		hazards: ["Can decompose violently if heated or contaminated. Some are also flammable."],
+		fire: ["Cool from a distance with water. Do not stir. Withdraw if it is venting hard or the box is deforming.", "A hold of 5.2 on fire is not a hero job — cool adjacent cargo and get people out."],
+		spill: ["Do not mop it into the bilge. Isolate. SDS — some peroxides detonate if they dry out."],
+		explosion: ["Runaway decomposition can be a deflagration. Heat (live reefer compressor, engine casing, sun) starts it."],
+		hold: ["On-deck preferred. A temperature-controlled 5.2 that has lost power is already an incident."],
+		ppe: ["SCBA, face shield. Do not put a bare hand on a hot pack."],
+		firstAid: ["Burns: cool water. Eyes: water 15 min. Smoke: fresh air, medical."],
+		ship: ["Keep off live reefers and Hatch 10 casing. If it is a reefer itself, treat a power loss as a casualty."]
 	},
 	"8": {
 		name: "Corrosive",
@@ -2836,6 +2985,12 @@ var CLASS_SHEETS = {
 		hazards: ["Burns skin and eyes. Some give off flammable or toxic vapor. Battery acid is sulfuric."],
 		fire: ["Water spray. Do not get a straight stream into a tote of acid (spatter). Cool the box."],
 		spill: ["For acid: soda ash / lime if you have it, otherwise dilute with lots of water on deck and keep people out of the runoff.", "For alkali: vinegar is not a shipboard plan — lots of water and keep it off the skin."],
+		explosion: ["Acid on some metals makes hydrogen. Caustic on aluminum does the same. Keep ignition down on a leak."],
+		vapor: ["HCl, oleum, and ammonia solution fume. Hatch 1 + wrong wind = house intakes."],
+		wetting: ["Water is the usual diluent on deck. Do not trap concentrated acid in a hold bilge."],
+		hold: ["Hold 2 is allowed for class 8. A fuming leak under deck is still a confined-space job — SCBA, readings."],
+		overboard: ["A corrosive box over the side is a pollution and a hull-paint problem for whoever picks it up."],
+		pollution: ["Do not pump it over. Boom / absorb. In port, call it in."],
 		ppe: ["Face shield, chemical gloves, apron. SCBA if it fumes."],
 		firstAid: ["Skin/eyes: water for 15–20 minutes. Remove clothing. Do not neutralize on the body."],
 		ship: ["Hold 2 OK for class 8. Battery pallets on deck are a leak/fire pair with class 9 lithium nearby — keep segregation."]
@@ -2848,6 +3003,11 @@ var CLASS_SHEETS = {
 		hazards: ["Depends on the commodity. Lithium: thermal runaway. Vehicles: fuel + battery."],
 		fire: ["See the UN sheet. Default: water to cool adjacent cargo. Lithium needs a long water attack."],
 		spill: ["Contain. Do not walk in it. Check the SDS / UN sheet."],
+		explosion: ["Lithium packs pop and throw cells. Vehicle fuel tanks add a class 3 fire on top."],
+		vapor: ["Lithium vent gas is toxic and flammable. SCBA."],
+		hold: ["A hold fire of lithium is a long, ugly fight. On-deck preferred."],
+		overboard: ["A lithium box in the water can still run away. A 3082 box is a sheen / pollution claim."],
+		pollution: ["UN 3077 / 3082 are the marine-pollutant pair. Plug scuppers. Do not pump over."],
 		ppe: ["Gloves, eye protection. SCBA in smoke."],
 		firstAid: ["As for the specific commodity."],
 		ship: ["On-deck or Hold 2. Lithium ion is the usual class 9 fire problem on this trade."]
@@ -2860,9 +3020,43 @@ var CLASS_SHEETS = {
 		hazards: ["Poison. Some are inhalation hazards (Hazard Zone A–D)."],
 		fire: ["Water spray from upwind. Contain runoff — it is still toxic."],
 		spill: ["Do not touch. Isolate. SCBA. Do not put it in the bilge."],
+		vapor: ["PIH liquids throw a lethal vapor. No filter mask. Hatch 1 + still air = house problem."],
+		hold: ["Packaged 6.1 is on-deck only on GEORGE II. Hold 2 is not approved for 6.1. Do not restow it down."],
+		overboard: ["A 6.1 box in the water is still a downwind poison problem for a boat crew."],
+		pollution: ["Toxic runoff is a MARPOL and a notification event. Do not wash it over the side."],
 		ppe: ["SCBA + chemical protection. No filter mask for PIH."],
 		firstAid: ["Fresh air. Water on skin. Medical help. Do not mouth-to-mouth."],
 		ship: ["Packaged 6.1 is on-deck only on GEORGE II. Hold 2 is not approved for 6.1."]
+	},
+	"6.2": {
+		name: "Infectious substance",
+		guide: "ERG 158",
+		cls: "6.2",
+		looksLike: "Usually small packages, often refrigerated. Biohazard mark. Do not open 'to see'.",
+		hazards: ["Infection. A broken pack is a medical and a notification problem, not a mop job."],
+		fire: ["Cool adjacent cargo. Do not smash the pack with a stream. The smoke is not the only hazard."],
+		spill: ["Do not touch. Isolate the box. Notify the agent, medical, and the Master. Cover. Do not sweep."],
+		vapor: ["Aerosolized material from a fire or a smashed pack. SCBA. Stay out of the smoke."],
+		hold: ["Nobody in that hold. This is not a 'ventilate and have a look' cargo."],
+		overboard: ["Do not send a boat crew onto a 6.2 pack in the water. Notify and exclude."],
+		ppe: ["SCBA, chemical gloves, coveralls. Dispose of PPE as infectious waste per the agent."],
+		firstAid: ["Do not touch your face. Wash. Medical — they need to know it was 6.2."],
+		ship: ["Treat it as a stay-out. The DCM line is enough to keep that hatch off-limits until the agent has a plan."]
+	},
+	"7": {
+		name: "Radioactive",
+		guide: "ERG 163",
+		cls: "7",
+		looksLike: "Type A / B packages, excepted packages, or industrial packages. Labels I / II / III. No leak you can see.",
+		hazards: ["Radiation. Fire can breach a package. Excepted packages (UN 2910 etc.) are not CDC; HRCQ / fissile controlled is."],
+		fire: ["Fight from the best distance. Do not smash the package. Cool adjacent cargo.", "If the package is involved, isolate and notify — this is no longer a deck fire only."],
+		spill: ["Do not touch a damaged package. Limit time, maximize distance. Notify."],
+		vapor: ["Smoke from a burning class 7 package may carry contamination. SCBA. Stay upwind."],
+		hold: ["Do not enter a hold that has a damaged class 7 package. Survey first if you have the kit; if not, stay out."],
+		overboard: ["A lost class 7 package is a notification to the flag, the Coast Guard, and the shipper. Mark the position."],
+		ppe: ["SCBA in smoke. Gloves. Do not eat, drink, or smoke on that hatch."],
+		firstAid: ["Move away. Remove outer clothing if you were in the smoke. Medical — tell them it is class 7."],
+		ship: ["Excepted packages are common and are not CDC. Type B and fissile are the ones that change the voyage."]
 	}
 };
 var UN_SHEETS = {
@@ -2875,9 +3069,42 @@ var UN_SHEETS = {
 		hazards: ["Flammable. Vapor collects in holds, house intakes, and on deck in still weather.", "BLEVE if fire-impaged."],
 		fire: ["Let a leaking gas fire burn until the leak is shut, while cooling the bottle with water.", "If you cannot cool a tank in fire, pull the team back."],
 		spill: ["Shut valves if it is safe. Isolate ignition. Ventilate low spaces. Gas-free before entry."],
+		explosion: ["BLEVE if the tank is in fire and you cannot cool it. Aerosol-style rocket is not the problem here — the tank is."],
+		vapor: ["Heavier than air. House intakes, holds, and the tunnel will hold it."],
 		ppe: ["SCBA. Fire kit. Gloves — liquid LPG freezes skin."],
 		firstAid: ["Fresh air. Frostbite: warm water. Burns: cool water."],
 		ship: ["Residue last contained in a tank or a bank of cylinders is still LPG. Treat empty uncleaned as full.", "Do not stow against the house or under intakes."]
+	},
+	"1005": {
+		un: "1005",
+		name: "Ammonia, anhydrous",
+		guide: "ERG 125",
+		cls: "2.3",
+		looksLike: "Colorless gas, sharp choking smell. Tank or cylinders. White cloud in damp air.",
+		hazards: ["Poisonous by inhalation. Corrosive to eyes and lungs. Can be flammable in a rich mix."],
+		fire: ["Cool from upwind with water. Do not walk the white cloud. Water spray knocks down vapor."],
+		spill: ["Upwind. Isolate. SCBA. Lots of water on deck to knock down vapor. Keep people out of the cloud."],
+		vapor: ["The white cloud is not 'just irritant'. A tank leak on Hatch 1 will put the house in it."],
+		hold: ["Do not enter. CDC if the ship total of UN 1005 is over 1 MT — do not mix with UN 1017."],
+		pollution: ["In port this is a COTP / eNOAD event if it meets the 1 MT line."],
+		ppe: ["SCBA + chemical suit. No filter mask."],
+		firstAid: ["Fresh air. Eyes/skin: water 15–20 min. Do not mouth-to-mouth. Medical immediately."],
+		ship: ["CDC over 1 MT of this UN. Keep off the house. Residue last contained in a tank is still ammonia."]
+	},
+	"1017": {
+		un: "1017",
+		name: "Chlorine",
+		guide: "ERG 124",
+		cls: "2.3",
+		looksLike: "Green-yellow gas, sharp bleach smell. Cylinders or a tank. Heavier than air.",
+		hazards: ["Poisonous by inhalation. Corrosive. Oxidizer — will feed a fire."],
+		fire: ["Cool from upwind. Do not get in the plume. Water spray to knock down vapor."],
+		spill: ["Upwind. Isolate. SCBA only. Do not enter holds. Notify USCG if in port."],
+		vapor: ["Heavier than air. A few cylinders in a hold will kill. Smell is a late warning."],
+		hold: ["Stay out. CDC if the ship total of UN 1017 is over 1 MT — do not add it to the ammonia total."],
+		ppe: ["SCBA + chemical suit. No filter mask."],
+		firstAid: ["Fresh air. Do not mouth-to-mouth. Medical immediately. Eyes: water."],
+		ship: ["CDC over 1 MT of this UN, separate from 1005. Keep off the house intakes."]
 	},
 	"2672": {
 		un: "2672",
@@ -2888,6 +3115,7 @@ var UN_SHEETS = {
 		hazards: ["Corrosive to eyes, lungs, and skin. Not the same as anhydrous UN 1005 (that is 2.3 PIH / CDC)."],
 		fire: ["Water spray. Cool the tank. The vapor is irritating — stay upwind with SCBA."],
 		spill: ["Lots of water on deck. Do not trap it in a hold. Keep people out of the white cloud."],
+		vapor: ["Fumes. Hatch 1 + still air = house intakes. This is class 8, not CDC as packaged 8."],
 		ppe: ["SCBA, face shield, chemical gloves."],
 		firstAid: ["Eyes/skin: water 15–20 min. Inhalation: fresh air, medical help."],
 		ship: ["Class 8 tank on deck is allowed. This is not CDC as packaged class 8. Anhydrous 1005 is a different animal."]
@@ -2901,6 +3129,7 @@ var UN_SHEETS = {
 		hazards: ["Sulfuric acid burns. Hydrogen off-gassing can ignite. Short circuits start fires."],
 		fire: ["CO2 or dry chemical on an electrical fire. Water spray to cool. Do not use a straight stream into a cracked case."],
 		spill: ["Soda ash if you have it. Otherwise flood with water on deck and keep off the skin. Isolate from alkalis and cyanides."],
+		explosion: ["Hydrogen at the terminals. No sparks, no smoking on a leaking pallet."],
 		ppe: ["Face shield, rubber gloves, apron."],
 		firstAid: ["Skin/eyes: water 15 min. Remove soaked clothes."],
 		ship: ["Common on GEORGE II pallets. Keep off lithium boxes and class 5.1. Hold 2 is allowed for class 8."]
@@ -2914,6 +3143,10 @@ var UN_SHEETS = {
 		hazards: ["Thermal runaway. Toxic/flammable vent gas. Water is the coolant, not a magic extinguisher."],
 		fire: ["Copious water from a safe distance. Aim to cool the pack and neighbors.", "Do not put a closed lid on a burning pack and walk away — it will cook off again. Boundary-cool for hours."],
 		spill: ["Damaged packs: isolate on deck in a steel tray if you can. No house, no hold if it is venting."],
+		explosion: ["Cells pop and throw. Helmet visor down. A closed box can rupture."],
+		vapor: ["Vent gas is toxic and flammable. SCBA. HF in some electrolytes."],
+		hold: ["A hold fire of lithium is a long, ugly fight. Keep a charged hose on that bay. On-deck preferred."],
+		overboard: ["A runaway pack in the water can still burn. Do not send a boat crew onto a smoking box."],
 		ppe: ["SCBA — the smoke is toxic. Fire kit. Helmet visor down (projectiles)."],
 		firstAid: ["Smoke inhalation: fresh air, medical. Burns: cool water. HF in some electrolytes — calcium gluconate if in the med chest."],
 		ship: ["On-deck preferred. A hold fire of lithium is a long, ugly fight. Keep a charged hose on that bay."]
@@ -2931,6 +3164,21 @@ var UN_SHEETS = {
 		firstAid: ["As UN 3480."],
 		ship: ["Same as 3480."]
 	},
+	"3090": {
+		un: "3090",
+		name: "Lithium metal batteries",
+		guide: "ERG 138",
+		cls: "9",
+		looksLike: "Cells or packs. Runaway looks like 3480 but water can make it worse on some metal cells — cool the neighbors anyway.",
+		hazards: ["Thermal runaway. Water on burning lithium metal can throw molten metal. Toxic smoke."],
+		fire: ["Cool adjacent cargo with water. A class D extinguisher if you have it on a small pack.", "Do not stand over it. Reignition is the rule. Boundary-cool for hours."],
+		spill: ["Isolate a damaged pack on deck. No hold, no house."],
+		explosion: ["Cells pop. Molten lithium. Visor down."],
+		hold: ["Worse than 3480 in a hold. On-deck only if you can help it."],
+		ppe: ["SCBA, fire kit, visor down."],
+		firstAid: ["Smoke: fresh air, medical. Burns: cool water."],
+		ship: ["Treat as the nastier lithium. Keep off class 8 batteries and 5.1."]
+	},
 	"1263": {
 		un: "1263",
 		name: "Paint / paint related material",
@@ -2940,9 +3188,11 @@ var UN_SHEETS = {
 		hazards: ["Flammable vapor. Some are corrosive (then see 8)."],
 		fire: ["Foam / dry chemical on a pool. Water spray to cool cans (they burst)."],
 		spill: ["Absorb. Keep ignition down. Ventilate."],
+		explosion: ["Cans burst and rocket in a stack fire. Do not stand in front of the carton."],
+		pollution: ["A paint box over the side or into the scuppers is a sheen. Plug scuppers."],
 		ppe: ["Gloves, eye protection. SCBA in a thick vapor."],
 		firstAid: ["Skin: soap and water. Eyes: water. Fresh air."],
-		ship: ["Very common on this trade. PG I is the jumpy one."]
+		ship: ["Very common on this trade. PG I is the jumpy one. Hatch 8 on-deck is a CSM block."]
 	},
 	"1950": {
 		un: "1950",
@@ -2953,6 +3203,7 @@ var UN_SHEETS = {
 		hazards: ["Projectiles in a fire. Flammable mist."],
 		fire: ["Water spray from cover. Do not stand in front of the carton."],
 		spill: ["Leaking cans: isolate, no sparks. Ventilate."],
+		explosion: ["The carton is a box of rockets once it cooks. Ltd Qty still does this."],
 		ppe: ["Eye protection. SCBA in a fire."],
 		firstAid: ["As for the fill — often solvent or paint."],
 		ship: ["Limited quantity cartons still burn. Keep off the house."]
@@ -2966,6 +3217,10 @@ var UN_SHEETS = {
 		hazards: ["Oxidizer. Contaminated with oil or combustibles it can detonate. Decomposition gas is toxic."],
 		fire: ["Flood with water. If it is in a hold fire you cannot flood, get the people off — this is the Texas City problem."],
 		spill: ["Keep it dry and uncontaminated. Sweep. No oil, no sawdust."],
+		explosion: ["Contaminated AN, or AN in a hold fire you cannot flood, can detonate. This is the one that sinks ships."],
+		vapor: ["NOx can kill hours later. SCBA. Medical even if they feel fine."],
+		wetting: ["Keep it dry. Wet + oil + heat is the worst mix, not a safety wash."],
+		hold: ["On-deck only. Residue in a hold has a 1,000 lb / 2 cu ft CDC test."],
 		ppe: ["SCBA in brown/orange NOx. Gloves."],
 		firstAid: ["NOx inhalation can kill hours later — medical, even if they feel fine."],
 		ship: ["On-deck only. Bags of AN are a CDC item if a permit is required. Residue in a hold has a 1,000 lb / 2 cu ft test."]
@@ -2979,6 +3234,7 @@ var UN_SHEETS = {
 		hazards: ["Deep chemical burns. Reacts with aluminum and some metals, giving hydrogen."],
 		fire: ["Not flammable. Water spray. Keep runoff off aluminum fittings if you can."],
 		spill: ["Lots of water. Do not use acid to 'neutralize' on deck unless the chief says so."],
+		explosion: ["Hydrogen off aluminum. Isolate ignition on a leak against fittings."],
 		ppe: ["Face shield, chemical gloves, apron."],
 		firstAid: ["Water 15–20 min. Do not put acid on the skin."],
 		ship: ["Class 8 — Hold 2 or on deck."]
@@ -2992,6 +3248,8 @@ var UN_SHEETS = {
 		hazards: ["Corrosive vapor. Attacks steel and lungs."],
 		fire: ["Not flammable. Water spray to knock down vapor. Cool the box."],
 		spill: ["Upwind. Water spray on the vapor. Soda ash if you have it. Keep out of the hold bilge."],
+		vapor: ["Fuming on deck will head for the house intakes — know the wind."],
+		pollution: ["Do not pump it over. It will eat the harbor and the report will eat you."],
 		ppe: ["SCBA, face shield, chemical gloves."],
 		firstAid: ["Water 15–20 min. Fresh air."],
 		ship: ["Fuming on deck will head for the house intakes — know the wind."]
@@ -3005,6 +3263,8 @@ var UN_SHEETS = {
 		hazards: ["Very low flashpoint. Vapor explodes in a hold."],
 		fire: ["Foam. No straight water on a pool. Cool tanks."],
 		spill: ["Ignition control. Absorb. No bilge pumping into the harbor."],
+		explosion: ["A hold of gasoline vapor will flash. Empty uncleaned tanks are still full."],
+		pollution: ["Sheen in the harbor is a notification. Plug scuppers."],
 		ppe: ["SCBA in vapor. Fire kit."],
 		firstAid: ["Fresh air. Do not induce vomiting."],
 		ship: ["On deck or Hold 2. Treat empty uncleaned tanks as full."]
@@ -3018,83 +3278,74 @@ var UN_SHEETS = {
 		hazards: ["Flammable. Some can polymerize if they cook."],
 		fire: ["Foam / dry chemical. Cool."],
 		spill: ["Absorb. Ignition control."],
+		explosion: ["A cooking tote can polymerize — heat and pressure. Cool, do not stir."],
 		ppe: ["Gloves, eye protection."],
 		firstAid: ["Skin: soap and water."],
 		ship: ["Common construction cargo."]
+	},
+	"3082": {
+		un: "3082",
+		name: "Environmentally hazardous substance, liquid, n.o.s.",
+		guide: "ERG 171",
+		cls: "9",
+		looksLike: "Often resins, oils, or pesticides in drums or cans. May have no obvious smell.",
+		hazards: ["Marine pollutant. Some are also combustible. The casualty is the harbor, not a fireball."],
+		fire: ["Water spray / foam as for the fill. Cool the box."],
+		spill: ["Absorb. Plug scuppers. Do not pump over the side."],
+		pollution: ["This UN exists because of the water. A scupper leak in port is a notification."],
+		overboard: ["A lost 3082 box is a pollution claim and a report. Mark the position."],
+		ppe: ["Gloves, eye protection."],
+		firstAid: ["Skin: soap and water. SDS for the technical name."],
+		ship: ["Very common on this trade. Not CDC. Still a MARPOL problem if it hits the water."]
 	}
 };
-function classKey(cls) {
+function classKey$1(cls) {
 	const c = (cls || "").trim();
 	if (c.startsWith("1")) return "1";
 	if (c.startsWith("2.1")) return "2.1";
 	if (c.startsWith("2.3")) return "2.3";
 	if (c.startsWith("2.2") || c.startsWith("2")) return "2.2";
 	if (c.startsWith("3")) return "3";
+	if (c.startsWith("4.2")) return "4.2";
+	if (c.startsWith("4.3")) return "4.3";
 	if (c.startsWith("4")) return "4.1";
+	if (c.startsWith("5.2")) return "5.2";
 	if (c.startsWith("5")) return "5.1";
+	if (c.startsWith("6.2")) return "6.2";
 	if (c.startsWith("6.1") || c.startsWith("6")) return "6.1";
+	if (c.startsWith("7")) return "7";
 	if (c.startsWith("8")) return "8";
 	if (c.startsWith("9")) return "9";
 	return "9";
 }
+var EXTRA_KEYS = [
+	"explosion",
+	"vapor",
+	"wetting",
+	"hold",
+	"overboard",
+	"pollution"
+];
 function sheetFor(un, cls, name) {
 	const u = (un || "").replace(/\D/g, "").padStart(4, "0");
-	if (UN_SHEETS[u]) return UN_SHEETS[u];
-	const base = CLASS_SHEETS[classKey(cls)] ?? CLASS_SHEETS["9"];
+	const base = CLASS_SHEETS[classKey$1(cls)] ?? CLASS_SHEETS["9"];
+	const specific = UN_SHEETS[u];
+	if (specific) {
+		const merged = {
+			...base,
+			...specific,
+			un: u,
+			cls: specific.cls || cls || base.cls
+		};
+		for (const k of EXTRA_KEYS) if (!merged[k]?.length) merged[k] = base[k];
+		return merged;
+	}
 	return {
 		...base,
 		un: u,
 		name: name || base.name,
 		cls: cls || base.cls
 	};
-}
-function dgLines(lines) {
-	return lines.filter((l) => l.input.un).map((l) => ({
-		line: l,
-		stow: parseStow(l.input.stowLoc)
-	}));
-}
-function hatchBuckets(lines) {
-	const all = dgLines(lines);
-	return HATCHES.map((spec) => {
-		const mine = all.filter((d) => d.stow?.hatch === spec.id);
-		const classes = [...new Set(mine.map((d) => d.line.hazClass).filter(Boolean))].sort();
-		return {
-			spec,
-			lines: mine,
-			containers: new Set(mine.map((d) => d.line.input.container).filter(Boolean)).size,
-			classes,
-			onDeck: mine.filter((d) => d.stow?.onDeck).length,
-			inHold: mine.filter((d) => d.stow && !d.stow.onDeck).length,
-			unknownStow: 0,
-			cdc: mine.filter((d) => d.line.verdict === "CDC" || d.line.verdict === "CDC_RESIDUE").length,
-			review: mine.filter((d) => d.line.verdict === "REVIEW").length
-		};
-	});
-}
-function unstowed(lines) {
-	return dgLines(lines).filter((d) => !d.stow);
-}
-function containersOnHatch(bucket) {
-	const map = /* @__PURE__ */ new Map();
-	for (const d of bucket.lines) {
-		const cn = (d.line.input.container || "").toUpperCase() || `row-${d.line.input.rowIndex}`;
-		const cur = map.get(cn) ?? {
-			key: cn,
-			container: d.line.input.container || "No container no.",
-			stow: d.stow,
-			lines: []
-		};
-		cur.lines.push(d);
-		if (!cur.stow && d.stow) cur.stow = d.stow;
-		map.set(cn, cur);
-	}
-	return [...map.values()].sort((a, b) => {
-		const ta = a.stow?.tier ?? 0;
-		const tb = b.stow?.tier ?? 0;
-		if (ta !== tb) return ta - tb;
-		return (a.stow?.row ?? 0) - (b.stow?.row ?? 0);
-	});
 }
 var GROUPS = [
 	"1.1",
@@ -3526,14 +3777,28 @@ var CODE_LABEL = {
 	"4": "Separated longitudinally by an intervening hold (4)",
 	"*": "Class 1 — see 49 CFR 176.144"
 };
-function boxesFrom(lines) {
-	const cartonFallback = !hasExplicitLqMarks(lines);
-	const lq = (line) => isLimitedQty(line, cartonFallback);
+/** BAPLIE box for this container number, if the plan has one. */
+function planBoxFor(container, plan) {
+	if (!plan || !container) return null;
+	const k = containerKey(container);
+	if (!k) return null;
+	return plan.boxes.find((b) => containerKey(b.container) === k) ?? null;
+}
+/**
+* Stow used for drawing and alarms: DCM if it parses, otherwise the BAPLIE cell.
+* Never writes onto line.input — that is a view-model, not a mutate-in-render.
+*/
+function resolvedStow(line, plan = null) {
+	const dcm = parseStow(line.input.stowLoc);
+	if (dcm) return dcm;
+	return planBoxFor(line.input.container, plan)?.stow ?? null;
+}
+function boxesFrom(lines, plan = null) {
 	const map = /* @__PURE__ */ new Map();
 	for (const line of lines) {
 		if (!line.un) continue;
-		const stow = parseStow(line.input.stowLoc);
-		const cn = (line.input.container || "").toUpperCase() || `row-${line.input.rowIndex}`;
+		const stow = resolvedStow(line, plan);
+		const cn = containerKey(line.input.container) || `row-${line.input.rowIndex}`;
 		const cur = map.get(cn) ?? {
 			key: cn,
 			container: line.input.container || "No container no.",
@@ -3550,7 +3815,7 @@ function boxesFrom(lines) {
 		if (!cur.stow && stow) cur.stow = stow;
 		const groups = classesOnLine(line);
 		for (const g of groups) if (!cur.classes.includes(g)) cur.classes.push(g);
-		if (!lq(line)) {
+		if (!isLimitedQty(line)) {
 			cur.allLq = false;
 			if (groups.length) cur.fullLineGroups.push(groups);
 			for (const g of groups) if (!cur.fullClasses.includes(g)) cur.fullClasses.push(g);
@@ -3569,7 +3834,7 @@ function hold2Forbidden(cls) {
 	if (g.startsWith("4") || g.startsWith("5") || g === "6.1") return `Class ${cls} is not allowed below deck on GEORGE II — Hold 2 is only approved for 1.4S, 2.x, 3, 8 and 9.`;
 	return null;
 }
-function locationIssues(box, spec, cartonFallback) {
+function locationIssues(box, spec) {
 	if (!box.stow) return [];
 	if (box.allLq) return [];
 	const issues = [];
@@ -3598,7 +3863,7 @@ function locationIssues(box, spec, cartonFallback) {
 		rule: "CSM 1.6 — under-deck IMDG is Hold 2 only"
 	});
 	if (!onDeck && spec.imdgHold) {
-		const checks = box.lines.length > 0 ? box.lines.filter((line) => !isLimitedQty(line, cartonFallback)).map((line) => ({
+		const checks = box.lines.length > 0 ? box.lines.filter((line) => !isLimitedQty(line)).map((line) => ({
 			un: line.un,
 			cls: line.hazClass,
 			sub: line.input.subsidiary
@@ -3657,11 +3922,22 @@ function pairSatisfied(code, a, b) {
 	const sameRow = a.stow.row === b.stow.row;
 	const hDiff = Math.abs(a.stow.hatch - b.stow.hatch);
 	const holdDiff = Math.abs(holdId(a.stow.hatch) - holdId(b.stow.hatch));
+	const tierGap = Math.abs(a.stow.tier - b.stow.tier);
+	const bayGap = Math.abs(a.stow.bay - b.stow.bay);
 	if (code === "1") return true;
 	if (code === "*") return false;
 	if (code === "2") {
-		if (sameHatch && sameLevel && (cells < 2 || sameRow)) return false;
-		return true;
+		if (!sameLevel) return true;
+		if (!sameHatch) {
+			if (hDiff !== 1) return true;
+			if (athwartGap(a.stow.hatch, a.stow.onDeck, a.stow.row, b.stow.row) >= 2) return true;
+			if (!footprintsTouchForeAft(a.stow, b.stow)) return true;
+			return false;
+		}
+		if (cells >= 2) return true;
+		if (tierGap >= 4) return true;
+		if (sameRow && bayGap >= 2) return true;
+		return false;
 	}
 	if (code === "3") {
 		if (sameHatch) return false;
@@ -3671,6 +3947,19 @@ function pairSatisfied(code, a, b) {
 	}
 	if (code === "4") return holdDiff >= 2;
 	return true;
+}
+/** True when occupied bays meet along the ship (no empty 20' between). */
+function footprintsTouchForeAft(a, b) {
+	if (a.hatch === b.hatch) {
+		const oa = occupiedBays(a);
+		const ob = occupiedBays(b);
+		return oa.some((bay) => ob.includes(bay));
+	}
+	const fwd = a.hatch < b.hatch ? a : b;
+	const aft = a.hatch < b.hatch ? b : a;
+	if (aft.hatch - fwd.hatch !== 1) return false;
+	const fwdMax = Math.max(...occupiedBays(fwd));
+	return Math.min(...occupiedBays(aft)) - fwdMax <= 2;
 }
 function pairIssue(a, b) {
 	if (a.key === b.key) {
@@ -3721,7 +4010,7 @@ function mergeBaplie(boxes, plan) {
 	const map = new Map(boxes.map((b) => [b.key, b]));
 	for (const p of plan.boxes) {
 		if (!p.dg.length) continue;
-		const key = p.container.toUpperCase();
+		const key = containerKey(p.container) || p.container.toUpperCase();
 		const cur = map.get(key) ?? {
 			key,
 			container: p.container,
@@ -3735,7 +4024,7 @@ function mergeBaplie(boxes, plan) {
 			allLq: false
 		};
 		if (!cur.stow && p.stow) cur.stow = p.stow;
-		const dcmOwnsLq = cur.lines.length > 0;
+		const dcmPresent = cur.lines.length > 0;
 		for (const dg of p.dg) {
 			const g = classGroup(dg.cls);
 			if (g && !cur.classes.includes(g)) cur.classes.push(g);
@@ -3743,7 +4032,7 @@ function mergeBaplie(boxes, plan) {
 				const sg = classGroup(dg.subsidiary);
 				if (sg && !cur.classes.includes(sg)) cur.classes.push(sg);
 			}
-			if (!dcmOwnsLq) {
+			if (!dcmPresent) {
 				const group = [g, dg.subsidiary ? classGroup(dg.subsidiary) : null].filter(Boolean);
 				if (g && !cur.fullClasses.includes(g)) cur.fullClasses.push(g);
 				if (group.length) cur.fullLineGroups.push(group);
@@ -3759,13 +4048,259 @@ function mergeBaplie(boxes, plan) {
 	}
 	return [...map.values()];
 }
-function screenVoyage(lines, plan = null) {
-	const cartonFallback = !hasExplicitLqMarks(lines);
-	const boxes = mergeBaplie(boxesFrom(lines), plan);
+/**
+* Stow disagreement only. Does not write onto line.input — use resolvedStow
+* for the view-model cell.
+*/
+function applyPlanStow(lines, plan) {
+	if (!plan) return [];
+	const byCn = /* @__PURE__ */ new Map();
+	for (const b of plan.boxes) {
+		const k = containerKey(b.container);
+		if (k && b.stow) byCn.set(k, b);
+	}
 	const issues = [];
+	const seen = /* @__PURE__ */ new Set();
+	for (const line of lines) {
+		const k = containerKey(line.input.container);
+		if (!k) continue;
+		const box = byCn.get(k);
+		if (!box?.stow) continue;
+		const dcm = parseStow(line.input.stowLoc);
+		const planRaw = box.stowRaw || formatStowRaw(box.stow);
+		if (!dcm) continue;
+		if (stowEqual(dcm, box.stow)) continue;
+		if (seen.has(k)) continue;
+		seen.add(k);
+		const dcmRaw = line.input.stowLoc || formatStowRaw(dcm);
+		issues.push({
+			id: `stow-mismatch-${k}`,
+			severity: "watch",
+			hatch: dcm.hatch,
+			containers: [line.input.container || k],
+			uns: line.un ? [line.un] : [],
+			title: `DCM stow ${dcmRaw} vs BAPLIE ${planRaw} — pick one.`,
+			detail: `${line.input.container || k} is ${dcmRaw} on the DCM and ${planRaw} on the BAPLIE. Alarms stay on the DCM cell; the plan slot is drawn separately.`,
+			rule: "DCM vs BAPLIE stow"
+		});
+	}
+	return issues;
+}
+function padUn$1(un) {
+	const d = (un || "").replace(/^UN/i, "").replace(/\D/g, "");
+	if (!d) return "";
+	return d.padStart(4, "0").slice(-4);
+}
+function classDisplay(cls, sub) {
+	const c = (cls || "").trim();
+	const extracted = c.match(/^([^\s(]+)\s*\(([^)]+)\)/);
+	const primary = extracted ? extracted[1] : c;
+	const s = (sub || extracted?.[2] || "").trim();
+	if (s) return `${primary} (${s})`;
+	return primary;
+}
+function classSig(cls, sub) {
+	const g = classGroup(cls) || (cls || "").replace(/\s+/g, "").toUpperCase();
+	const extracted = (cls || "").match(/\(([^)]+)\)/);
+	const subRaw = (sub || extracted?.[1] || "").trim();
+	const sg = subRaw ? classGroup(subRaw) || subRaw : "";
+	if (!g) return sg;
+	return sg ? `${g}|${sg}` : g;
+}
+function cargoCompareIssues(lines, plan) {
+	if (!plan) return [];
+	const byCn = /* @__PURE__ */ new Map();
+	for (const b of plan.boxes) {
+		const k = containerKey(b.container);
+		if (k) byCn.set(k, b);
+	}
+	const issues = [];
+	const seen = /* @__PURE__ */ new Set();
+	for (const line of lines) {
+		const k = containerKey(line.input.container);
+		if (!k) continue;
+		const box = byCn.get(k);
+		if (!box?.dg.length) continue;
+		const dcmUn = padUn$1(line.un);
+		const dcmSig = classSig(line.hazClass, line.input.subsidiary);
+		const planUns = [...new Set(box.dg.map((d) => padUn$1(d.un)).filter(Boolean))];
+		const planSigs = [...new Set(box.dg.map((d) => classSig(d.cls, d.subsidiary)).filter(Boolean))];
+		const hatch = resolvedStow(line, plan)?.hatch ?? box.stow?.hatch ?? 0;
+		if (dcmUn && planUns.length && !planUns.includes(dcmUn)) {
+			const id = `cargo-un-${k}`;
+			if (!seen.has(id)) {
+				seen.add(id);
+				issues.push({
+					id,
+					severity: "watch",
+					hatch,
+					containers: [line.input.container || k],
+					uns: [dcmUn, ...planUns],
+					title: `DCM UN ${dcmUn} vs BAPLIE UN ${planUns.join(", ")} — pick one.`,
+					detail: `${line.input.container || k} is UN ${dcmUn} on the Excel DCM and UN ${planUns.join(", ")} on the BAPLIE DGS.`,
+					rule: "DCM vs BAPLIE cargo"
+				});
+			}
+		}
+		if (dcmSig && planSigs.length && !planSigs.includes(dcmSig)) {
+			const planLabel = box.dg.map((d) => classDisplay(d.cls, d.subsidiary)).filter(Boolean)[0] || planSigs[0];
+			const dcmLabel = classDisplay(line.hazClass, line.input.subsidiary);
+			const id = `cargo-cls-${k}`;
+			if (!seen.has(id)) {
+				seen.add(id);
+				issues.push({
+					id,
+					severity: "watch",
+					hatch,
+					containers: [line.input.container || k],
+					uns: dcmUn ? [dcmUn] : [],
+					title: `DCM class ${dcmLabel} vs BAPLIE ${planLabel} — pick one.`,
+					detail: `${line.input.container || k} is class ${dcmLabel} on the DCM and ${planLabel} on the BAPLIE DGS.`,
+					rule: "DCM vs BAPLIE cargo"
+				});
+			}
+		}
+	}
+	return issues;
+}
+function csmShipWatches(lines, plan) {
+	const issues = [];
+	const seen = /* @__PURE__ */ new Set();
+	const push = (issue) => {
+		if (seen.has(issue.id)) return;
+		seen.add(issue.id);
+		issues.push(issue);
+	};
+	const occupants = [];
+	if (plan) for (const b of plan.boxes) {
+		if (!b.stow) continue;
+		occupants.push({
+			container: b.container,
+			stow: b.stow,
+			dg: b.dg.length > 0,
+			reefer: b.reefer,
+			operating: b.operating
+		});
+	}
+	for (const line of lines) {
+		const stow = resolvedStow(line, plan);
+		if (!stow) continue;
+		const k = containerKey(line.input.container);
+		if (k && occupants.some((o) => containerKey(o.container) === k)) {
+			const cur = occupants.find((o) => containerKey(o.container) === k);
+			if (cur && !isLimitedQty(line)) cur.dg = true;
+			continue;
+		}
+		occupants.push({
+			container: line.input.container || `row-${line.input.rowIndex}`,
+			stow,
+			dg: !isLimitedQty(line),
+			reefer: false,
+			operating: false
+		});
+	}
+	for (const o of occupants) {
+		const { stow, container } = o;
+		if (o.operating && stow.bay === 18 && stow.tier === 92) push({
+			id: `csm-bay18-t92-${containerKey(container) || container}`,
+			severity: "watch",
+			hatch: stow.hatch,
+			containers: [container],
+			uns: [],
+			title: `${container} is a Bay 18 6th-tier live reefer`,
+			detail: "The conversion sheet does not allow live reefers on bay 18 at the 6th tier (92).",
+			rule: "Conversion sheet — Bay 18 reefer height"
+		});
+		if (o.dg && !stow.onDeck && (stow.hatch === 3 || stow.hatch === 4) && (stow.row === 5 || stow.row === 6)) push({
+			id: `csm-h2-mach-${containerKey(container) || container}`,
+			severity: "watch",
+			hatch: stow.hatch,
+			containers: [container],
+			uns: [],
+			title: `${container} is within 3 m of a Hold 2 machinery-space boundary`,
+			detail: "CSM: stow 3 m from machinery-space boundaries in Hold 2. Outboard rows 05 and 06 under hatches 3 and 4 are that strip — not only Hatch 10 casing rows 03/04.",
+			rule: "CSM — Hold 2 machinery-space 3 m"
+		});
+		if (stow.hatch === 5 && stow.onDeck && (stow.row === 5 || stow.row === 6) && stow.tier === 90) push({
+			id: `csm-fan-h5-${containerKey(container) || container}`,
+			severity: "watch",
+			hatch: 5,
+			containers: [container],
+			uns: [],
+			title: `${container} is on Hatch 5 outboard ${String(stow.row).padStart(2, "0")}, 5th tier — cargo-fan access`,
+			detail: "Prefer not to use outboard cells 05 and 06 on Hatch 5 at the 5th tier. That is cargo-fan access.",
+			rule: "Conversion sheet — Hatch 5 cargo-fan"
+		});
+	}
+	return issues;
+}
+function slotOccupants(lines, plan) {
+	const map = /* @__PURE__ */ new Map();
+	if (plan) for (const b of plan.boxes) {
+		if (!b.stow) continue;
+		const key = containerKey(b.container) || b.container.toUpperCase();
+		map.set(key, {
+			key,
+			container: b.container,
+			stow: b.stow
+		});
+	}
+	for (const line of lines) {
+		const stow = resolvedStow(line, plan);
+		if (!stow) continue;
+		const key = containerKey(line.input.container) || `row-${line.input.rowIndex}`;
+		if (map.has(key)) continue;
+		map.set(key, {
+			key,
+			container: line.input.container || key,
+			stow
+		});
+	}
+	return [...map.values()];
+}
+function baysOverlap(a, b) {
+	if (a.stow.hatch !== b.stow.hatch) return false;
+	if (a.stow.onDeck !== b.stow.onDeck) return false;
+	if (a.stow.row !== b.stow.row) return false;
+	if (a.stow.tier !== b.stow.tier) return false;
+	const spec = hatchSpec(a.stow.hatch);
+	const oa = occupiedBays(a.stow, spec);
+	const ob = occupiedBays(b.stow, spec);
+	return oa.some((bay) => ob.includes(bay));
+}
+function slotOverlapIssues(lines, plan) {
+	const occ = slotOccupants(lines, plan);
+	const issues = [];
+	for (let i = 0; i < occ.length; i++) for (let j = i + 1; j < occ.length; j++) {
+		const a = occ[i];
+		const b = occ[j];
+		if (a.key === b.key) continue;
+		if (!baysOverlap(a, b)) continue;
+		issues.push({
+			id: `slot-${a.key}-${b.key}-${a.stow.bay}-${a.stow.row}-${a.stow.tier}`,
+			severity: "block",
+			hatch: a.stow.hatch,
+			containers: [a.container, b.container],
+			uns: [],
+			title: "two boxes in one slot.",
+			detail: `${a.container} at ${formatStowRaw(a.stow)} and ${b.container} at ${formatStowRaw(b.stow)} occupy the same 20'/40' footprint on Hatch ${a.stow.hatch}. Not 176.83.`,
+			rule: "Slot overlap — two boxes in one cell"
+		});
+	}
+	return issues;
+}
+function screenVoyage(lines, plan = null) {
+	const mismatch = applyPlanStow(lines, plan);
+	const boxes = mergeBaplie(boxesFrom(lines, plan), plan);
+	const issues = [
+		...mismatch,
+		...cargoCompareIssues(lines, plan),
+		...csmShipWatches(lines, plan),
+		...slotOverlapIssues(lines, plan)
+	];
 	for (const box of boxes) {
 		const spec = box.stow ? hatchSpec(box.stow.hatch) : void 0;
-		if (spec) issues.push(...locationIssues(box, spec, cartonFallback));
+		if (spec) issues.push(...locationIssues(box, spec));
 	}
 	for (const box of boxes) {
 		const inner = pairIssue(box, box);
@@ -3797,7 +4332,7 @@ function screenVoyage(lines, plan = null) {
 		list.push(issue);
 		byHatch.set(issue.hatch, list);
 		for (const c of issue.containers) {
-			const key = c.toUpperCase();
+			const key = containerKey(c) || c.toUpperCase();
 			const cur = byContainer.get(key) ?? [];
 			cur.push(issue);
 			byContainer.set(key, cur);
@@ -3813,7 +4348,8 @@ function screenVoyage(lines, plan = null) {
 	};
 }
 function issuesForKey(screen, key) {
-	return screen.byContainer.get(key.toUpperCase()) ?? [];
+	const raw = key.split("#")[0];
+	return screen.byContainer.get(containerKey(raw) || raw.toUpperCase()) ?? [];
 }
 function worstSeverity(issues) {
 	if (issues.some((i) => i.severity === "block")) return "block";
@@ -3821,49 +4357,162 @@ function worstSeverity(issues) {
 	if (issues.some((i) => i.severity === "watch")) return "watch";
 	return null;
 }
-function hatchSlots(bucket, plan) {
-	const fromDg = containersOnHatch(bucket);
-	if (!plan) return fromDg;
+function dgLines(lines, plan = null) {
+	return lines.filter((l) => l.input.un).map((l) => ({
+		line: l,
+		stow: resolvedStow(l, plan)
+	}));
+}
+function hatchBuckets(lines, plan = null) {
+	const all = dgLines(lines, plan);
+	return HATCHES.map((spec) => {
+		const mine = all.filter((d) => d.stow?.hatch === spec.id);
+		const classes = [...new Set(mine.map((d) => d.line.hazClass).filter(Boolean))].sort();
+		return {
+			spec,
+			lines: mine,
+			containers: new Set(mine.map((d) => containerKey(d.line.input.container) || d.line.input.container).filter(Boolean)).size,
+			classes,
+			onDeck: mine.filter((d) => d.stow?.onDeck).length,
+			inHold: mine.filter((d) => d.stow && !d.stow.onDeck).length,
+			unknownStow: 0,
+			cdc: mine.filter((d) => d.line.verdict === "CDC" || d.line.verdict === "CDC_RESIDUE").length,
+			review: mine.filter((d) => d.line.verdict === "REVIEW").length
+		};
+	});
+}
+function unstowed(lines, plan = null) {
+	return dgLines(lines, plan).filter((d) => !d.stow);
+}
+function containersOnHatch(bucket) {
 	const map = /* @__PURE__ */ new Map();
-	const byStow = /* @__PURE__ */ new Map();
-	for (const s of fromDg) {
-		map.set(s.key, {
-			...s,
-			reefer: false,
-			operating: false
-		});
-		if (s.stow) byStow.set(`${s.stow.bay}-${s.stow.row}-${s.stow.tier}`, map.get(s.key));
-	}
-	for (const box of plan.boxes) {
-		if (box.stow?.hatch !== bucket.spec.id) continue;
-		const key = box.container.toUpperCase();
-		const loc = `${box.stow.bay}-${box.stow.row}-${box.stow.tier}`;
-		let cur = map.get(key);
-		if (!cur && byStow.has(loc) && !byStow.get(loc).box) cur = byStow.get(loc);
-		if (!cur) {
-			cur = {
-				key,
-				container: box.container,
-				stow: box.stow,
-				lines: [],
-				reefer: false,
-				operating: false
-			};
-			map.set(key, cur);
-		}
-		cur.box = box;
-		cur.reefer = box.reefer;
-		cur.operating = box.operating;
-		if (!cur.stow) cur.stow = box.stow;
-		if (box.container && cur.container.startsWith("row-")) cur.container = box.container;
-		byStow.set(loc, cur);
+	for (const d of bucket.lines) {
+		const cn = containerKey(d.line.input.container) || `row-${d.line.input.rowIndex}`;
+		const cur = map.get(cn) ?? {
+			key: cn,
+			container: d.line.input.container || "No container no.",
+			stow: d.stow,
+			lines: []
+		};
+		cur.lines.push(d);
+		if (!cur.stow && d.stow) cur.stow = d.stow;
+		map.set(cn, cur);
 	}
 	return [...map.values()].sort((a, b) => {
 		const ta = a.stow?.tier ?? 0;
 		const tb = b.stow?.tier ?? 0;
 		if (ta !== tb) return ta - tb;
-		return (a.stow?.row ?? 0) - (b.stow?.row ?? 0);
+		const ra = (a.stow?.row ?? 0) - (b.stow?.row ?? 0);
+		if (ra) return ra;
+		return (a.stow?.bay ?? 0) - (b.stow?.bay ?? 0);
 	});
+}
+function footprintKeys(stow) {
+	return occupiedBays(stow).map((bay) => `${stow.hatch}-${bay}-${stow.row}-${stow.tier}-${stow.onDeck ? "d" : "h"}`);
+}
+function markConflicts(slots) {
+	const byLoc = /* @__PURE__ */ new Map();
+	for (const s of slots) {
+		if (!s.stow) continue;
+		for (const k of footprintKeys(s.stow)) {
+			const cur = byLoc.get(k) ?? [];
+			cur.push(s);
+			byLoc.set(k, cur);
+		}
+	}
+	for (const group of byLoc.values()) if (new Set(group.map((s) => containerKey(s.container))).size > 1) for (const s of group) s.conflict = true;
+}
+function hatchSlots(bucket, plan) {
+	const spec = bucket.spec;
+	const fromDg = containersOnHatch(bucket);
+	if (!plan) {
+		const only = fromDg.map((s) => ({
+			...s,
+			reefer: false,
+			operating: false,
+			ghost: ghostOf(s, spec)
+		}));
+		markConflicts(only);
+		return sortSlots(only);
+	}
+	const slots = fromDg.map((s) => ({
+		...s,
+		reefer: false,
+		operating: false
+	}));
+	for (const box of plan.boxes) {
+		if (box.stow?.hatch !== spec.id) continue;
+		const key = containerKey(box.container) || box.container.toUpperCase();
+		const dcm = slots.find((s) => containerKey(s.container) === key && !s.box);
+		if (!dcm) {
+			slots.push({
+				key,
+				container: box.container,
+				stow: box.stow,
+				lines: [],
+				box,
+				reefer: box.reefer,
+				operating: box.operating
+			});
+			continue;
+		}
+		if (!dcm.stow) {
+			dcm.stow = box.stow;
+			dcm.box = box;
+			dcm.reefer = box.reefer;
+			dcm.operating = box.operating;
+			continue;
+		}
+		if (stowEqual(dcm.stow, box.stow)) {
+			dcm.box = box;
+			dcm.reefer = box.reefer;
+			dcm.operating = box.operating;
+			continue;
+		}
+		dcm.mismatch = true;
+		dcm.key = `${key}#dcm`;
+		slots.push({
+			key,
+			container: box.container,
+			stow: box.stow,
+			lines: [],
+			box,
+			reefer: box.reefer,
+			operating: box.operating,
+			mismatch: true
+		});
+	}
+	for (const s of slots) s.ghost = ghostOf(s, spec);
+	markConflicts(slots);
+	return sortSlots(slots);
+}
+function ghostOf(s, spec) {
+	if (!s.stow) return false;
+	if (!isRealRow(spec, s.stow.onDeck, s.stow.row)) return true;
+	if (s.stow.onDeck && s.stow.tier < 82) return true;
+	return false;
+}
+function sortSlots(slots) {
+	return slots.sort((a, b) => {
+		const ta = a.stow?.tier ?? 0;
+		const tb = b.stow?.tier ?? 0;
+		if (ta !== tb) return ta - tb;
+		const ra = a.stow?.row ?? 0;
+		const rb = b.stow?.row ?? 0;
+		if (ra !== rb) return ra - rb;
+		return (a.stow?.bay ?? 0) - (b.stow?.bay ?? 0);
+	});
+}
+function ghostSlots(slots, spec) {
+	return slots.filter((s) => {
+		if (s.ghost) return true;
+		if (!s.stow || !spec) return false;
+		return !isRealRow(spec, s.stow.onDeck, s.stow.row);
+	});
+}
+function unplacedBoxes(plan) {
+	if (!plan) return [];
+	return plan.boxes.filter((b) => !b.stow || !HATCHES.some((h) => h.id === b.stow?.hatch));
 }
 /** Conversion sheet: all reefers face aft, except bay 6 or 22 below (motors fwd). HAN+RFF overrides. */
 function reeferMotors(stow) {
@@ -3883,6 +4532,7 @@ function heatSensitive(cls, un) {
 function beside(a, b) {
 	if (a.onDeck !== b.onDeck) return false;
 	if (a.hatch !== b.hatch) return false;
+	if (!sameBayColumn(a, b)) return false;
 	const tierGap = Math.abs(a.tier - b.tier);
 	if (a.row === b.row && tierGap > 0 && tierGap <= 2) return true;
 	if (a.tier === b.tier && athwartGap(a.hatch, a.onDeck, a.row, b.row) <= 1) return true;
@@ -3890,25 +4540,30 @@ function beside(a, b) {
 }
 function atMotorEnd(reefer, other, motors) {
 	if (reefer.onDeck !== other.onDeck) return false;
+	if (!sameBayColumn(reefer, other)) return false;
 	if (reefer.row !== other.row) return false;
 	if (Math.abs(reefer.tier - other.tier) > 2) return false;
-	if (motors === "aft") return other.bay > reefer.bay && other.bay - reefer.bay <= 2;
-	return other.bay < reefer.bay && reefer.bay - other.bay <= 2;
+	const mine = occupiedBays(reefer);
+	if (mine.length < 2) return false;
+	const theirs = occupiedBays(other);
+	const motorBay = motors === "aft" ? Math.max(...mine) : Math.min(...mine);
+	return theirs.includes(motorBay);
 }
 function dgSpots(lines, plan) {
-	const cartonFallback = !hasExplicitLqMarks(lines);
 	const out = [];
 	const seen = /* @__PURE__ */ new Set();
+	const onDcm = /* @__PURE__ */ new Set();
 	for (const line of lines) {
-		const stow = parseStow(line.input.stowLoc);
+		const stow = resolvedStow(line, plan);
 		if (!stow) continue;
-		const container = (line.input.container || "").toUpperCase() || `row-${line.input.rowIndex}`;
+		const container = containerKey(line.input.container) || `row-${line.input.rowIndex}`;
+		if (containerKey(line.input.container)) onDcm.add(container);
 		const key = `${container}|${line.un}|${stow.bay}-${stow.row}-${stow.tier}`;
 		if (seen.has(key)) continue;
 		seen.add(key);
-		if (isLimitedQty(line, cartonFallback)) continue;
+		if (isLimitedQty(line)) continue;
 		out.push({
-			container,
+			container: line.input.container || container,
 			stow,
 			cls: line.hazClass,
 			un: line.un,
@@ -3917,8 +4572,10 @@ function dgSpots(lines, plan) {
 	}
 	if (plan) for (const box of plan.boxes) {
 		if (!box.stow || !box.dg.length) continue;
+		const ck = containerKey(box.container);
+		if (ck && onDcm.has(ck)) continue;
 		for (const dg of box.dg) {
-			const key = `${box.container}|${dg.un}|${box.stow.bay}-${box.stow.row}-${box.stow.tier}`;
+			const key = `${ck || box.container}|${dg.un}|${box.stow.bay}-${box.stow.row}-${box.stow.tier}`;
 			if (seen.has(key)) continue;
 			seen.add(key);
 			out.push({
@@ -3934,26 +4591,25 @@ function dgSpots(lines, plan) {
 }
 function reeferHeatIssues(lines, plan) {
 	if (!plan) return [];
-	const reefers = plan.boxes.filter((b) => b.reefer && b.stow);
+	const reefers = plan.boxes.filter((b) => b.reefer && b.operating && b.stow);
 	const dgs = dgSpots(lines, plan);
 	const issues = [];
 	for (const dg of dgs) for (const rf of reefers) {
 		const stow = rf.stow;
-		if (dg.container === rf.container) continue;
+		if (containerKey(dg.container) && containerKey(dg.container) === containerKey(rf.container)) continue;
 		const motors = rf.motors;
 		const motor = atMotorEnd(stow, dg.stow, motors);
 		if (!(beside(stow, dg.stow) || motor)) continue;
-		const hot = rf.operating && heatSensitive(dg.cls, dg.un);
-		const where = motor ? `at the ${motors === "aft" ? "aft (motor)" : "fwd (motor)"} end of ${rf.container}` : `next to reefer ${rf.container}`;
+		if (!heatSensitive(dg.cls, dg.un)) continue;
 		issues.push({
 			id: `rf-${dg.container}-${rf.container}-${dg.un}`,
-			severity: hot ? "seg" : "watch",
+			severity: "seg",
 			hatch: dg.stow.hatch,
 			containers: [dg.container, rf.container],
 			uns: dg.un ? [dg.un] : [],
-			title: hot ? `${dg.container} UN ${dg.un} class ${dg.cls} is too close to a live reefer` : `${dg.container} sits ${where}`,
-			detail: motor ? `Reefers on GEORGE II face ${motors === "aft" ? "aft (motors aft)" : `forward — bay ${stow.bay} below is the exception`}. ${rf.container} ${rf.iso || "RF"} ${rf.operating ? `${rf.tempC ?? "set"}°C` : "NOR"}. DG ${dg.un || dg.cls} is on the compressor end.` : `${rf.container} is a ${rf.operating ? "live" : "NOR"} reefer (${rf.iso || "R"}) ${formatSpot(stow)}. ${dg.container} UN ${dg.un || "—"} class ${dg.cls} is in an adjacent cell.`,
-			rule: rf.operating ? "Heat source — live reefer compressor (IMDG keep away from sources of heat)" : "NOR reefer on the bay plan — confirm it stays off"
+			title: `${dg.container} UN ${dg.un} class ${dg.cls} is too close to a live reefer`,
+			detail: motor ? `Reefers on GEORGE II face ${motors === "aft" ? "aft (motors aft)" : `forward — bay ${stow.bay} below is the exception`}. ${rf.container} ${rf.iso || "RF"} ${rf.tempC ?? "set"}°C. DG ${dg.un || dg.cls} is on the compressor end.` : `${rf.container} is a live reefer (${rf.iso || "R"}) ${formatSpot(stow)}. ${dg.container} UN ${dg.un || "—"} class ${dg.cls} is in an adjacent cell.`,
+			rule: "Heat source — live reefer compressor (IMDG keep away from sources of heat)"
 		});
 	}
 	return issues;
@@ -3969,55 +4625,99 @@ function countBoxes(plan, hatch) {
 	if (!plan) return 0;
 	return plan.boxes.filter((b) => hatch == null || b.stow?.hatch === hatch).length;
 }
+/** Unique containers that carry DG — DCM lines plus BAPLIE DGS. */
+function countDangerous(lines, plan, hatch) {
+	const keys = /* @__PURE__ */ new Set();
+	for (const line of lines) {
+		if (!line.un) continue;
+		const stow = resolvedStow(line, plan);
+		if (hatch != null && stow?.hatch !== hatch) continue;
+		keys.add(containerKey(line.input.container) || `row-${line.input.rowIndex}`);
+	}
+	if (plan) for (const box of plan.boxes) {
+		if (!box.dg.length) continue;
+		if (hatch != null && box.stow?.hatch !== hatch) continue;
+		keys.add(containerKey(box.container) || box.container.toUpperCase());
+	}
+	return keys.size;
+}
 function motorsNote(box) {
 	if (!box.reefer) return "";
 	if (box.han && /^RFF/i.test(box.han)) return "Motor faces FORWARD (HAN+RFF on the BAPLIE).";
 	if (box.motors === "fwd") return "Motor faces FORWARD — bay 6 or 22 below is the conversion-sheet exception.";
 	return "Motor faces AFT (whole vessel except bay 6 / 22 below, unless HAN+RFF).";
 }
+function slotLookupKey(key) {
+	return key.split("#")[0];
+}
+function slotIsDg(s) {
+	if (s.lines.length > 0) return true;
+	return Boolean(s.box?.dg.length);
+}
+function slotCargoClass(s) {
+	const dg = slotIsDg(s);
+	const rf = Boolean(s.reefer);
+	if (rf && dg) return "slot-cargo-reefer-dg";
+	if (rf && s.operating) return "slot-cargo-reefer";
+	if (rf) return "slot-cargo-nor";
+	if (dg) return "slot-cargo-dg";
+	return "slot-cargo-dry";
+}
 function ShipBoard({ parsed, result, baplie }) {
 	const [hatchId, setHatchId] = (0, import_react.useState)(null);
 	const [slotKey, setSlotKey] = (0, import_react.useState)(null);
 	const [chem, setChem] = (0, import_react.useState)(null);
 	const lines = result?.lines ?? [];
-	const cartonFallback = !hasExplicitLqMarks(lines);
-	const lqOf = (line) => isLimitedQty(line, cartonFallback);
-	const buckets = (0, import_react.useMemo)(() => hatchBuckets(lines), [lines]);
+	const lqOf = (line) => isLimitedQty(line);
+	const buckets = (0, import_react.useMemo)(() => hatchBuckets(lines, baplie), [lines, baplie]);
 	const screen = (0, import_react.useMemo)(() => screenVoyage(lines, baplie), [lines, baplie]);
 	const heat = (0, import_react.useMemo)(() => reeferHeatIssues(lines, baplie), [lines, baplie]);
-	const loose = (0, import_react.useMemo)(() => unstowed(lines), [lines]);
+	const loose = (0, import_react.useMemo)(() => unstowed(lines, baplie), [lines, baplie]);
+	const unplaced = (0, import_react.useMemo)(() => unplacedBoxes(baplie), [baplie]);
 	const active = buckets.find((b) => b.spec.id === hatchId) ?? null;
 	const slots = active ? hatchSlots(active, baplie) : [];
 	const slot = slots.find((s) => s.key === slotKey) ?? null;
+	const totalRf = countReefers(baplie);
+	const totalDg = countDangerous(lines, baplie);
+	const totalBoxes = countBoxes(baplie);
 	const voyageName = parsed?.voyage.voyage ? `${parsed.voyage.vessel || VESSEL.name} ${parsed.voyage.voyage}` : baplie?.voyage ? `${baplie.vessel || VESSEL.name} ${baplie.voyage}` : VESSEL.name;
-	if (chem) {
-		const sheet = sheetFor(chem.un, chem.cls, chem.name);
-		return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChemicalView, {
-			sheet,
-			onBack: () => setChem(null)
-		});
-	}
-	if (slot && active) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ContainerView, {
-		slot,
-		hatch: active,
-		issues: [...issuesForKey(screen, slot.key), ...heat.filter((i) => i.containers.some((c) => c.toUpperCase() === slot.key))],
-		onBack: () => setSlotKey(null),
-		onChem: setChem,
-		cartonFallback
-	});
-	if (active) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HatchView, {
+	(0, import_react.useEffect)(() => {
+		if (!slotKey) return;
+		const onKey = (e) => {
+			if (e.key === "Escape") {
+				if (chem) setChem(null);
+				else setSlotKey(null);
+			}
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [slotKey, chem]);
+	if (active) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(HatchView, {
 		bucket: active,
 		slots,
 		issues: [...screen.byHatch.get(active.spec.id) ?? [], ...heat.filter((i) => i.hatch === active.spec.id)],
-		screen,
 		baplie,
-		cartonFallback,
 		onBack: () => {
 			setHatchId(null);
 			setSlotKey(null);
+			setChem(null);
 		},
-		onSlot: (k) => setSlotKey(k)
-	});
+		onSlot: (k) => {
+			setChem(null);
+			setSlotKey(k);
+		}
+	}), slot ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ContainerPopout, {
+		slot,
+		hatch: active,
+		issues: [...issuesForKey(screen, slotLookupKey(slot.key)), ...heat.filter((i) => i.containers.some((c) => containerKey(c) === containerKey(slotLookupKey(slot.key))))],
+		chem,
+		onClose: () => {
+			setSlotKey(null);
+			setChem(null);
+		},
+		onChem: setChem,
+		onBackFromChem: () => setChem(null)
+	}) : null] });
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "space-y-6",
 		children: [
@@ -4043,29 +4743,42 @@ function ShipBoard({ parsed, result, baplie }) {
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 					className: "mt-1 max-w-3xl text-sm text-muted",
-					children: ["House and conning are forward. Hatches 1–12 run aft. The engine casing sits at Hatch 10; the LNG vent mast is part of the plant, not a cargo tank.", baplie ? " BAPLIE is on this voyage: reefers (motors aft), dry cargo, and DG from the DCM share the same cells." : " Drop a BAPLIE on Manifest when you want reefers and the rest of the boxes. DCM-only still works."]
-				})
+					children: ["House and conning are forward. Hatches 1–12 run aft. The engine casing sits at Hatch 10; the LNG vent mast is part of the plant, not a cargo tank.", baplie ? " Reefers are blue. DG is red. A box that is both is split on the diagonal. Other cargo is plain." : " Drop a BAPLIE on Manifest when you want reefers and the rest of the boxes. DCM-only still works."]
+				}),
+				baplie ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+					className: "mt-3 font-mono text-sm text-ink",
+					children: [
+						totalBoxes,
+						" boxes · ",
+						totalRf,
+						" reefers · ",
+						totalDg,
+						" DG",
+						unplaced.length ? ` · ${unplaced.length} unplaced` : ""
+					]
+				}) : totalDg > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+					className: "mt-3 font-mono text-sm text-ink",
+					children: [totalDg, " DG containers"]
+				}) : null
 			] }),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(IssueBanner, {
-				screen,
-				extra: heat,
-				onHatch: setHatchId
-			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Profile, {
 				buckets,
 				screen,
 				baplie,
+				lines,
 				onHatch: setHatchId
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 				className: "grid gap-3 sm:grid-cols-2 lg:grid-cols-3",
 				children: buckets.map((b) => {
-					const issues = screen.byHatch.get(b.spec.id) ?? [];
-					const worst = worstSeverity(issues);
+					const worst = worstSeverity(screen.byHatch.get(b.spec.id) ?? []);
+					const nBoxes = baplie ? countBoxes(baplie, b.spec.id) : 0;
+					const nRf = baplie ? countReefers(baplie, b.spec.id) : 0;
+					const nDg = countDangerous(lines, baplie, b.spec.id);
 					return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 						type: "button",
 						onClick: () => setHatchId(b.spec.id),
-						className: cn("rounded-lg border bg-surface p-4 text-left shadow-border transition-colors duration-150", worst === "block" ? "border-cdc" : worst === "seg" ? "border-review" : b.lines.length > 0 ? "border-accent/40 hover:border-accent" : "hover:border-navy/30"),
+						className: cn("rounded-lg border bg-surface p-4 text-left shadow-border transition-colors duration-150", worst === "block" ? "border-cdc" : worst === "seg" ? "border-review" : b.lines.length > 0 || nBoxes > 0 ? "border-accent/40 hover:border-accent" : "hover:border-navy/30"),
 						children: [
 							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 								className: "flex items-start justify-between gap-2",
@@ -4080,12 +4793,16 @@ function ShipBoard({ parsed, result, baplie }) {
 										b.spec.bays.join("-"),
 										b.spec.holdAccess === "tunnel" ? " · tunnel" : b.spec.holdAccess === "deck" ? " · deck access" : ""
 									]
-								})] }), b.lines.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
+								})] }), nBoxes > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
 									variant: "navy",
-									children: [b.lines.length, " DG"]
-								}) : baplie && countBoxes(baplie, b.spec.id) > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
+									children: [
+										nBoxes,
+										" boxes",
+										nDg ? ` · ${nDg} DG` : ""
+									]
+								}) : nDg > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
 									variant: "navy",
-									children: [countBoxes(baplie, b.spec.id), " boxes"]
+									children: [nDg, " DG"]
 								}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 									className: "text-xs text-subtle",
 									children: "No DG"
@@ -4109,18 +4826,9 @@ function ShipBoard({ parsed, result, baplie }) {
 									" full DG"
 								]
 							}),
-							worst && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-								className: cn("mt-1 text-xs", worst === "block" ? "text-cdc" : "text-review"),
-								children: [
-									issues.filter((i) => i.severity === "block").length ? `${issues.filter((i) => i.severity === "block").length} should not be here` : "",
-									issues.filter((i) => i.severity === "block").length && issues.filter((i) => i.severity === "seg").length ? " · " : "",
-									issues.filter((i) => i.severity === "seg").length ? `${issues.filter((i) => i.severity === "seg").length} segregation` : "",
-									!issues.filter((i) => i.severity === "block").length && !issues.filter((i) => i.severity === "seg").length && issues.filter((i) => i.severity === "watch").length ? `${issues.filter((i) => i.severity === "watch").length} caution` : ""
-								]
-							}),
-							baplie && countReefers(baplie, b.spec.id) > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+							nRf > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 								className: "mt-1 text-xs text-ink",
-								children: [countReefers(baplie, b.spec.id), " reefers · motors aft"]
+								children: [nRf, " reefers"]
 							}),
 							b.cdc > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 								className: "mt-1 text-xs text-cdc",
@@ -4140,6 +4848,21 @@ function ShipBoard({ parsed, result, baplie }) {
 					children: "Drop the Excel DCM if you have it — Stow Loc is on that sheet. The printed manifest still screens for CDC."
 				})]
 			}),
+			unplaced.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "rounded-lg border border-review/30 bg-review-soft p-4 text-sm",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+					className: "font-medium",
+					children: [unplaced.length, " BAPLIE boxes have no hatch on this ship"]
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "mt-1 text-muted",
+					children: "Unknown bays stay unplaced. They still count in the reefer and DG totals above."
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(IssueBanner, {
+				screen,
+				extra: heat,
+				onHatch: setHatchId
+			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 				className: "space-y-1 text-sm text-muted",
 				children: SHIP_NOTES.map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: ["— ", n] }, n))
@@ -4157,41 +4880,38 @@ function IssueBanner({ screen, extra, onHatch }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: cn("rounded-lg border p-4", screen.blocks ? "border-cdc/40 bg-cdc-soft" : "border-review/40 bg-review-soft"),
 		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "font-medium text-ink",
+				children: "What is wrong"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "mt-1 text-sm text-muted",
 				children: [
 					screen.blocks ? `${screen.blocks} should not be in that space` : "Spaces look allowed",
-					screen.segs + extra.filter((i) => i.severity === "seg").length ? ` · ${screen.segs + extra.filter((i) => i.severity === "seg").length} segregation / heat` : "",
+					screen.segs + extra.filter((i) => i.severity === "seg").length ? ` · ${screen.segs + extra.filter((i) => i.severity === "seg").length} too close / heat` : "",
 					screen.watches + extra.filter((i) => i.severity === "watch").length ? ` · ${screen.watches + extra.filter((i) => i.severity === "watch").length} caution` : ""
 				]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 				className: "mt-3 space-y-2",
-				children: hot.slice(0, 8).map((issue) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+				children: hot.slice(0, 12).map((issue) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 					type: "button",
 					onClick: () => issue.hatch && onHatch(issue.hatch),
 					className: "text-left",
-					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-							className: "text-sm font-medium text-ink",
-							children: issue.title
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-							className: "text-xs text-muted",
-							children: issue.detail
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-							className: "mt-0.5 font-mono text-xs text-subtle",
-							children: issue.rule
-						})
-					]
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "text-sm font-medium text-ink",
+						children: issue.title
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "text-xs text-muted",
+						children: issue.detail
+					})]
 				}) }, issue.id))
 			}),
-			hot.length > 8 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+			hot.length > 12 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 				className: "mt-2 text-xs text-muted",
 				children: [
 					"+ ",
-					hot.length - 8,
+					hot.length - 12,
 					" more — open the hatch."
 				]
 			})
@@ -4204,24 +4924,17 @@ function IssueList({ issues }) {
 		className: "space-y-2",
 		children: issues.map((issue) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
 			className: cn("rounded-lg border p-3", issue.severity === "block" ? "border-cdc/40 bg-cdc-soft" : issue.severity === "seg" ? "border-review/40 bg-review-soft" : "border-accent/30 bg-residue-soft"),
-			children: [
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-					className: "text-sm font-medium text-ink",
-					children: issue.title
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-					className: "mt-1 text-sm text-muted",
-					children: issue.detail
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-					className: "mt-1 font-mono text-xs text-subtle",
-					children: issue.rule
-				})
-			]
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "text-sm font-medium text-ink",
+				children: issue.title
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "mt-1 text-sm text-muted",
+				children: issue.detail
+			})]
 		}, issue.id))
 	});
 }
-function Profile({ buckets, screen, baplie, onHatch }) {
+function Profile({ buckets, screen, baplie, lines, onHatch }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 		className: "overflow-x-auto rounded-lg border bg-navy p-4 text-primary-foreground shadow-border",
 		children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", {
@@ -4231,6 +4944,31 @@ function Profile({ buckets, screen, baplie, onHatch }) {
 			"aria-label": "GEORGE II profile, bow to the left",
 			children: [
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("title", { children: "M/V GEORGE II · bow left · house forward · hatches 1–12 aft" }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("defs", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("linearGradient", {
+					id: "hatch-reefer-dg",
+					x1: "1",
+					y1: "0",
+					x2: "0",
+					y2: "1",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("stop", {
+							offset: "0%",
+							stopColor: "var(--color-reefer)"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("stop", {
+							offset: "49%",
+							stopColor: "var(--color-reefer)"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("stop", {
+							offset: "51%",
+							stopColor: "var(--color-dg-box)"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("stop", {
+							offset: "100%",
+							stopColor: "var(--color-dg-box)"
+						})
+					]
+				}) }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("line", {
 					x1: "20",
 					y1: "200",
@@ -4319,10 +5057,12 @@ function Profile({ buckets, screen, baplie, onHatch }) {
 				HATCHES.map((h, i) => {
 					const x = 218 + i * 68;
 					const b = buckets[i];
-					const hot = b.lines.length > 0;
+					const nBoxes = baplie ? countBoxes(baplie, h.id) : 0;
+					const hot = b.lines.length > 0 || nBoxes > 0;
 					const w = h.id === 10 ? 44 : 58;
 					const worst = worstSeverity(screen.byHatch.get(h.id) ?? []);
 					const rf = baplie ? countReefers(baplie, h.id) : 0;
+					const dg = countDangerous(lines, baplie, h.id);
 					return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { children: [
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", {
 							x,
@@ -4330,8 +5070,8 @@ function Profile({ buckets, screen, baplie, onHatch }) {
 							width: w,
 							height: 32,
 							rx: "2",
-							fill: worst === "block" ? "var(--color-cdc)" : worst === "seg" ? "var(--color-review)" : hot ? "var(--color-ok)" : rf ? "var(--color-accent)" : "currentColor",
-							fillOpacity: hot || worst || rf ? .95 : .2,
+							fill: dg && rf ? "url(#hatch-reefer-dg)" : dg ? "var(--color-dg-box)" : rf ? "var(--color-reefer)" : nBoxes ? "var(--color-navy-2)" : "currentColor",
+							fillOpacity: hot || rf || dg ? .95 : .2,
 							stroke: "currentColor",
 							strokeOpacity: "0.6",
 							className: "cursor-pointer",
@@ -4341,28 +5081,20 @@ function Profile({ buckets, screen, baplie, onHatch }) {
 							x: x + w / 2,
 							y: 107,
 							textAnchor: "middle",
-							fill: hot || worst ? "var(--color-primary-foreground)" : "currentColor",
+							fill: hot || rf || dg ? "var(--color-primary-foreground)" : "currentColor",
 							fontSize: "12",
 							fontWeight: 600,
 							className: "cursor-pointer",
 							onClick: () => onHatch(h.id),
 							children: h.id
 						}),
-						worst && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("text", {
+						worst === "block" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("text", {
 							x: x + w / 2,
 							y: 80,
 							textAnchor: "middle",
-							fill: worst === "block" ? "var(--color-cdc)" : "var(--color-review)",
+							fill: "var(--color-cdc)",
 							fontSize: "10",
 							children: "!"
-						}),
-						!worst && hot && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("text", {
-							x: x + w / 2,
-							y: 80,
-							textAnchor: "middle",
-							fill: "var(--color-review)",
-							fontSize: "10",
-							children: b.lines.length
 						})
 					] }, h.id);
 				}),
@@ -4434,28 +5166,18 @@ function Profile({ buckets, screen, baplie, onHatch }) {
 		})
 	});
 }
-function HatchView({ bucket, slots, issues, screen, baplie, cartonFallback, onBack, onSlot }) {
-	const deckOccupied = slots.filter((s) => s.stow?.onDeck).map((s) => s.stow.row);
-	const holdOccupied = slots.filter((s) => s.stow && !s.stow.onDeck).map((s) => s.stow.row);
-	const deckRowList = deckRowsFor(bucket.spec, deckOccupied);
-	const holdRowList = holdRowsFor(bucket.spec, holdOccupied);
-	const deckTiers = [
-		82,
-		84,
-		86,
-		88,
-		90
-	];
-	const holdTiers = [
-		2,
-		4,
-		6,
-		8,
-		10,
-		12
-	];
-	function cell(tier, row) {
-		return slots.find((s) => s.stow?.tier === tier && s.stow?.row === row);
+function HatchView({ bucket, slots, issues, baplie, onBack, onSlot }) {
+	const drawn = slots.filter((s) => !s.ghost);
+	const ghosts = ghostSlots(slots, bucket.spec);
+	const deckTiers = deckTiersFor(bucket.spec, drawn.filter((s) => s.stow?.onDeck).map((s) => s.stow.tier));
+	const holdTiers = holdTiersFor(bucket.spec);
+	const deckRowList = deckRowsFor(bucket.spec);
+	const holdRowList = holdRowsFor(bucket.spec);
+	function cells(tier, row, bay) {
+		return drawn.filter((s) => {
+			if (!s.stow || s.stow.tier !== tier || s.stow.row !== row) return false;
+			return occupiedBays(s.stow, bucket.spec).includes(bay);
+		});
 	}
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "space-y-5",
@@ -4476,71 +5198,102 @@ function HatchView({ bucket, slots, issues, screen, baplie, cartonFallback, onBa
 			}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 				className: "mt-1 text-sm text-muted",
 				children: [
-					"Section looking forward from aft — port is to the left (even cells), 00 is centerline, starboard is odd. Bays ",
-					bucket.spec.bays.join("-"),
-					" (",
+					"Section looking forward from aft — port is to the left (even cells), 00 is centerline, starboard is odd. Each cell is three bays: ",
+					bucket.spec.bays[0],
+					" (20' fwd) ·",
+					" ",
 					bucket.spec.bay40,
-					" is the 40'). Press a box for the cargo list."
+					" (40') · ",
+					bucket.spec.bays[2],
+					" (20' aft). Press a box for the cargo list."
 				]
 			})] }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "flex flex-wrap gap-2 text-xs",
 				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
+					baplie && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
+						variant: "navy",
+						children: [
+							countBoxes(baplie, bucket.spec.id),
+							" boxes · ",
+							countReefers(baplie, bucket.spec.id),
+							" RF ·",
+							" ",
+							drawn.filter(slotIsDg).length,
+							" DG"
+						]
+					}),
+					!baplie && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
 						variant: "navy",
 						children: [bucket.lines.length, " DG lines"]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
-						variant: "navy",
-						children: [bucket.containers, " containers"]
 					}),
 					bucket.spec.imdgOnDeck ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Badge, { children: "On-deck IMDG OK" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Badge, {
 						variant: "navy",
 						children: "No IMDG on cover"
 					}),
-					bucket.spec.imdgHold && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Badge, { children: "Hold 2 IMDG" }),
-					issues.some((i) => i.severity === "block") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Badge, {
-						variant: "cdc",
-						children: "Should not be here"
+					bucket.spec.imdgHold && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Badge, { children: "Hold 2 IMDG" })
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "flex flex-wrap items-center gap-3 text-xs text-muted",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+						className: "inline-flex items-center gap-1.5",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "slot-cargo-reefer size-3 rounded-sm" }), " Reefer"]
 					}),
-					issues.some((i) => i.severity === "seg") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Badge, {
-						variant: "review",
-						children: "Segregation"
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+						className: "inline-flex items-center gap-1.5",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "slot-cargo-dg size-3 rounded-sm" }), " DG"]
 					}),
-					baplie && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
-						variant: "navy",
-						children: [
-							countBoxes(baplie, bucket.spec.id),
-							" BAPLIE · ",
-							countReefers(baplie, bucket.spec.id),
-							" RF"
-						]
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+						className: "inline-flex items-center gap-1.5",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "slot-cargo-reefer-dg size-3 rounded-sm" }), " Reefer + DG"]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+						className: "inline-flex items-center gap-1.5",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "slot-cargo-dry size-3 rounded-sm ring-1 ring-border" }), " Other cargo"]
 					})
 				]
 			}),
-			baplie ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-				className: "text-xs text-muted",
-				children: "Navy = live reefer (motors aft). Muted navy = NOR. Green = Ltd Qty only. Ink = full DG. Red/amber = a real CSM or 176.83 hit. Grey = other cargo. Empty cells are empty."
-			}) : null,
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(IssueList, { issues }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(BayGrid, {
-				title: `On deck · bays ${bucket.spec.bays.join("-")}${bucket.spec.id === 1 ? " · 11 across with 00" : bucket.spec.id === 10 ? " · bay 38 no middle" : " · 12 across"}`,
+				title: `On deck · bays ${bucket.spec.bays.join("-")} · 20'/40'/20'${bucket.spec.id === 1 ? " · 11 across with 00" : bucket.spec.id === 10 ? " · bay 38 no middle" : " · 12 across"}`,
 				tiers: deckTiers,
 				rows: deckRowList,
-				cell,
-				onSlot,
-				screen,
-				cartonFallback
+				bays: bucket.spec.bays,
+				cells,
+				onSlot
 			}),
-			bucket.spec.holdRows > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BayGrid, {
-				title: `Below deck · ${bucket.spec.hold || "hold"} · ${bucket.spec.holdAccess} access · 7 across with 00`,
+			holdRowList.length > 0 && holdTiers.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BayGrid, {
+				title: `Below deck · ${bucket.spec.hold || "hold"} · ${bucket.spec.holdAccess} access · 7 across with 00 · 20'/40'/20'`,
 				tiers: holdTiers,
 				rows: holdRowList,
-				cell,
-				onSlot,
-				screen,
-				cartonFallback
+				bays: bucket.spec.bays,
+				cells,
+				onSlot
 			}),
+			ghosts.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+					className: "text-sm font-medium",
+					children: "Not a real cell on this cover"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+					className: "mt-1 text-xs text-muted",
+					children: [
+						"Hatch ",
+						bucket.spec.id,
+						" does not have these rows. They stay off the grid."
+					]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "mt-2 flex flex-wrap gap-2",
+					children: ghosts.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+						type: "button",
+						onClick: () => onSlot(s.key),
+						className: "rounded-md border border-review/40 bg-review-soft px-3 py-2 font-mono text-xs",
+						children: [s.container, s.stow ? ` · ${s.stow.bay}-${String(s.stow.row).padStart(2, "0")}-${s.stow.tier}` : ""]
+					}, s.key))
+				})
+			] }),
 			slots.some((s) => !s.stow) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
 				className: "text-sm font-medium",
 				children: "On this hatch, position not parsed"
@@ -4553,6 +5306,20 @@ function HatchView({ bucket, slots, issues, screen, baplie, cartonFallback, onBa
 					children: s.container
 				}, s.key))
 			})] }),
+			issues.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+					className: "text-sm font-medium",
+					children: "What is wrong on this hatch"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "mt-1 text-xs text-muted",
+					children: "Told here — the grid is cargo only (blue reefer, red DG)."
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "mt-2",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(IssueList, { issues })
+				})
+			] }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 				className: "space-y-1 text-sm text-muted",
 				children: bucket.spec.notes.map((w) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: ["— ", w] }, w))
@@ -4560,41 +5327,83 @@ function HatchView({ bucket, slots, issues, screen, baplie, cartonFallback, onBa
 		]
 	});
 }
-function BayGrid({ title, tiers, rows, cell, onSlot, screen, cartonFallback }) {
+function slotLabel(s) {
+	const cls = s.lines.map((l) => l.line.hazClass).filter(Boolean)[0] || s.box?.dg.map((d) => d.cls).filter(Boolean)[0] || "";
+	if (s.reefer && slotIsDg(s)) return `${s.operating ? "RF" : "NOR"}/${cls || "DG"}`;
+	if (slotIsDg(s)) return cls || "DG";
+	if (s.reefer) {
+		const face = s.box?.motors === "fwd" ? "fwd" : "aft";
+		return `${s.operating ? "RF" : "NOR"} ${face}`;
+	}
+	if (s.stow?.fortyFoot) return s.box?.iso || "40'";
+	return s.box?.iso || "20'";
+}
+function SlotButton({ s, wide, home, onSlot }) {
+	const span = !home && !!s.stow?.fortyFoot;
+	const cargo = slotCargoClass(s);
+	const light = cargo !== "slot-cargo-dry";
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+		type: "button",
+		onClick: () => onSlot(s.key),
+		title: span ? `${s.container} 40' occupies this 20' end` : s.container,
+		className: cn("flex min-h-14 w-full flex-col items-center justify-center rounded-sm px-0.5 font-mono text-[9px] leading-tight", wide ? "min-w-[2.4rem]" : "min-w-[1.6rem]", cargo, s.conflict || s.mismatch ? "ring-1 ring-review" : "", span ? "opacity-90" : ""),
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+			className: "max-w-full truncate",
+			children: s.container.replace(/[A-Z]{4}/, (p) => p.slice(0, 4))
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+			className: light ? "text-primary-foreground/85" : "text-muted",
+			children: [
+				span ? "40'" : slotLabel(s),
+				!span && s.stow?.fortyFoot ? " 40'" : "",
+				s.conflict ? " !" : ""
+			]
+		})]
+	});
+}
+function BayGrid({ title, tiers, rows, bays, cells, onSlot }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "overflow-x-auto",
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 			className: "mb-2 text-xs font-medium tracking-wide text-subtle uppercase",
 			children: [title, " · PORT even ← · 00 CL · STBD odd →"]
 		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
-			className: "w-full min-w-[520px] border-collapse text-center text-xs",
+			className: "w-full min-w-[720px] border-collapse text-center text-xs",
 			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "p-1 text-muted",
 				children: "Tier"
-			}), rows.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+			}), rows.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("th", {
 				className: "p-1 font-mono text-muted",
-				children: String(r).padStart(2, "0")
+				children: [String(r).padStart(2, "0"), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "mt-0.5 grid grid-cols-[1fr_1.3fr_1fr] font-normal text-[9px] text-subtle",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: bays[0] }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: bays[1] }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: bays[2] })
+					]
+				})]
 			}, r))] }) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: [...tiers].reverse().map((tier) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
 				className: "p-1 font-mono text-muted",
 				children: tier
-			}), rows.map((row) => {
-				const s = cell(tier, row);
-				const worst = s ? worstSeverity(issuesForKey(screen, s.key)) : null;
-				const lqOnly = !!s && s.lines.length > 0 && s.lines.every((d) => isLimitedQty(d.line, cartonFallback));
-				const fullDg = !!s && s.lines.some((d) => !isLimitedQty(d.line, cartonFallback));
-				return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
-					className: "p-0.5",
-					children: s ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-						type: "button",
-						onClick: () => onSlot(s.key),
-						className: cn("flex h-14 w-full flex-col items-center justify-center rounded-sm px-1 font-mono text-[10px] leading-tight", worst === "block" ? "bg-cdc-soft text-ink" : worst === "seg" ? "bg-review-soft text-ink" : fullDg ? "bg-navy/15 text-ink" : lqOnly ? "bg-ok-soft text-ink" : s.operating ? "bg-navy text-primary-foreground" : s.reefer ? "bg-navy-2 text-primary-foreground" : s.box ? "bg-surface-2 text-ink" : "bg-ok-soft text-ink"),
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: s.container.replace(/[A-Z]{4}/, (p) => p.slice(0, 4)) }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-							className: s.operating || s.reefer ? "text-primary-foreground/80" : "text-muted",
-							children: [s.lines.length ? s.lines.map((l) => l.line.hazClass).filter(Boolean)[0] : s.reefer ? s.operating ? "RF" : "NOR" : s.box?.iso || "—", worst ? " !" : ""]
-						})]
-					}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "h-14 rounded-sm bg-surface-2/80" })
-				}, row);
-			})] }, tier)) })]
+			}), rows.map((row) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "p-0.5",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "grid grid-cols-[1fr_1.3fr_1fr] gap-px",
+					children: bays.map((bay, i) => {
+						const stack = cells(tier, row, bay);
+						const wide = i === 1;
+						if (!stack.length) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: cn("min-h-14 rounded-sm bg-surface-2/80", wide && "min-w-[2.4rem]") }, bay);
+						return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: "flex flex-col gap-px",
+							children: stack.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SlotButton, {
+								s,
+								wide,
+								home: s.stow?.bay === bay,
+								onSlot
+							}, s.key))
+						}, bay);
+					})
+				})
+			}, row))] }, tier)) })]
 		})]
 	});
 }
@@ -4632,95 +5441,161 @@ function CargoLine({ d, onChem, lq }) {
 					name: d.line.name
 				}),
 				className: "inline-flex h-10 items-center gap-2 rounded-md bg-navy px-3 text-sm text-primary-foreground",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Flame, { className: "size-4" }), " Spill / fire"]
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TriangleAlert, { className: "size-4" }), " Spill / fire"]
 			})]
 		})
 	});
 }
-function ContainerView({ slot, hatch, issues, onBack, onChem, cartonFallback }) {
-	const full = slot.lines.filter((d) => !isLimitedQty(d.line, cartonFallback));
-	const lq = slot.lines.filter((d) => isLimitedQty(d.line, cartonFallback));
+function ContainerPopout({ slot, hatch, issues, chem, onClose, onChem, onBackFromChem }) {
+	const full = slot.lines.filter((d) => !isLimitedQty(d.line));
+	const lq = slot.lines.filter((d) => isLimitedQty(d.line));
+	const sheet = chem ? sheetFor(chem.un, chem.cls, chem.name) : null;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "space-y-5",
+		className: "fixed inset-0 z-50 flex items-end justify-center sm:items-center",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+			type: "button",
+			"aria-label": "Close",
+			className: "absolute inset-0 bg-ink/40",
+			onClick: onClose
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			role: "dialog",
+			"aria-modal": "true",
+			className: "relative z-10 flex max-h-[88dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-lg border bg-surface shadow-border sm:rounded-lg",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "flex items-start justify-between gap-3 border-b px-4 py-3",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "min-w-0",
+					children: sheet ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: "font-mono text-xs text-subtle uppercase",
+						children: [
+							sheet.guide,
+							" · Class ",
+							sheet.cls,
+							sheet.un ? ` · UN ${sheet.un}` : ""
+						]
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+						className: "mt-1 truncate text-lg font-medium",
+						children: sheet.name
+					})] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: "font-mono text-xs text-subtle uppercase",
+						children: [
+							"Hatch ",
+							hatch.spec.id,
+							" · Container"
+						]
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+						className: "mt-1 truncate font-mono text-lg",
+						children: slot.container
+					})] })
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+					type: "button",
+					onClick: onClose,
+					className: "inline-flex size-10 shrink-0 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-ink",
+					"aria-label": "Close popout",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(X, { className: "size-4" })
+				})]
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "overflow-y-auto px-4 py-4",
+				children: sheet ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "space-y-4",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+							type: "button",
+							onClick: onBackFromChem,
+							className: "inline-flex items-center gap-2 text-sm text-accent",
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ArrowLeft, { className: "size-4" }),
+								" ",
+								slot.container
+							]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+							className: "text-sm text-muted",
+							children: sheet.looksLike
+						}),
+						sheetSections(sheet).map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SheetBlock, {
+							title: s.title,
+							items: s.items
+						}, s.title))
+					]
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ContainerBody, {
+					slot,
+					issues,
+					full,
+					lq,
+					onChem
+				})
+			})]
+		})]
+	});
+}
+function ContainerBody({ slot, issues, full, lq, onChem }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "space-y-4",
 		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-				type: "button",
-				onClick: onBack,
-				className: "inline-flex items-center gap-2 text-sm text-accent",
+			slot.stow && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "text-sm text-muted",
+				children: formatStow(slot.stow)
+			}),
+			slot.mismatch && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "text-sm text-review",
+				children: "DCM and BAPLIE do not agree on this cell — pick one."
+			}),
+			slot.conflict && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "text-sm text-cdc",
+				children: "Two boxes hash to this bay-row-tier."
+			}),
+			slot.reefer && slot.box ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "text-sm text-ink",
 				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ArrowLeft, { className: "size-4" }),
-					" Hatch ",
-					hatch.spec.id
+					"Reefer ",
+					slot.box.iso || "",
+					" ",
+					slot.operating ? `live ${slot.box.tempC ?? "set"}°C` : "NOR (not operating)",
+					". ",
+					motorsNote(slot.box)
+				]
+			}) : null,
+			slot.box && !slot.reefer && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "text-sm text-muted",
+				children: [
+					slot.box.iso || "Dry",
+					" · ",
+					slot.box.weightKg ? `${Math.round(slot.box.weightKg)} kg` : "weight —",
+					slot.box.pol ? ` · POL ${slot.box.pol}` : "",
+					slot.box.pod ? ` · POD ${slot.box.pod}` : ""
 				]
 			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-					className: "font-mono text-xs text-subtle uppercase",
-					children: "Container"
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
-					className: "mt-1 font-mono text-xl",
-					children: slot.container
-				}),
-				slot.stow && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-					className: "mt-1 text-sm text-muted",
-					children: formatStow(slot.stow)
-				}),
-				slot.reefer && slot.box ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-					className: "mt-1 text-sm text-ink",
-					children: [
-						"Reefer ",
-						slot.box.iso || "",
-						" ",
-						slot.operating ? `live ${slot.box.tempC ?? "set"}°C` : "NOR (not operating)",
-						". ",
-						motorsNote(slot.box)
-					]
-				}) : null,
-				slot.box && !slot.reefer && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-					className: "mt-1 text-sm text-muted",
-					children: [
-						slot.box.iso || "Dry",
-						" · ",
-						slot.box.weightKg ? `${Math.round(slot.box.weightKg)} kg` : "weight —",
-						slot.box.pol ? ` · POL ${slot.box.pol}` : "",
-						slot.box.pod ? ` · POD ${slot.box.pod}` : ""
-					]
-				})
-			] }),
-			issues.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(IssueList, { issues }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-				className: "rounded-lg border border-ok/30 bg-ok-soft p-3 text-sm text-ok",
-				children: "No CSM location block and no 176.83 hit against this box on the positions we have."
-			}),
-			full.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", {
-				className: "text-sm font-medium",
-				children: ["Dangerous goods · ", full.length]
-			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
-				className: "mt-2 space-y-3",
-				children: full.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CargoLine, {
-					d,
-					onChem,
-					lq: false
-				}, d.line.input.rowIndex))
-			})] }),
-			lq.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+			issues.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(IssueList, { issues }) : null,
+			full.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", {
 					className: "text-sm font-medium",
-					children: ["Limited quantity · ", lq.length]
+					children: ["Dangerous goods · ", full.length]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 					className: "mt-1 text-xs text-muted",
-					children: "IMDG 3.4.4.2 — not segregated from other boxes, and not under the hatch class table."
+					children: "Press the chemical for the spill / fire sheet."
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 					className: "mt-2 space-y-3",
-					children: lq.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CargoLine, {
+					children: full.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CargoLine, {
 						d,
 						onChem,
-						lq: true
+						lq: false
 					}, d.line.input.rowIndex))
 				})
 			] }),
+			lq.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", {
+				className: "text-sm font-medium",
+				children: ["Limited quantity · ", lq.length]
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+				className: "mt-2 space-y-3",
+				children: lq.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CargoLine, {
+					d,
+					onChem,
+					lq: true
+				}, d.line.input.rowIndex))
+			})] }),
 			!slot.lines.length && slot.box?.dg.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 				className: "space-y-3",
 				children: slot.box.dg.map((dg, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
@@ -4753,7 +5628,7 @@ function ContainerView({ slot, hatch, issues, onBack, onChem, cartonFallback }) 
 								name: dg.name
 							}),
 							className: "mt-2 inline-flex h-10 items-center gap-2 rounded-md bg-navy px-3 text-sm text-primary-foreground",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Flame, { className: "size-4" }), " Spill / fire"]
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TriangleAlert, { className: "size-4" }), " Spill / fire"]
 						}) : null
 					]
 				}, `${dg.un}-${i}`))
@@ -4766,6 +5641,7 @@ function ContainerView({ slot, hatch, issues, onBack, onChem, cartonFallback }) 
 	});
 }
 function ChemicalView({ sheet, onBack }) {
+	const sections = sheetSections(sheet);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "space-y-5",
 		children: [
@@ -4794,33 +5670,13 @@ function ChemicalView({ sheet, onBack }) {
 					children: sheet.looksLike
 				})
 			] }),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SheetBlock, {
-				title: "Hazards",
-				items: sheet.hazards
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SheetBlock, {
-				title: "Fire",
-				items: sheet.fire
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SheetBlock, {
-				title: "Spill",
-				items: sheet.spill
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SheetBlock, {
-				title: "PPE",
-				items: sheet.ppe
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SheetBlock, {
-				title: "First aid",
-				items: sheet.firstAid
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SheetBlock, {
-				title: "On GEORGE II",
-				items: sheet.ship
-			}),
+			sections.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SheetBlock, {
+				title: s.title,
+				items: s.items
+			}, s.title)),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "text-xs text-subtle",
-				children: "Public ERG actions for a container ship. Confirm against the SDS, EmS, and the Master’s orders before you commit people."
+				children: "Public ERG actions for a container ship — fire, spill, explosion, vapor, wetting, hold entry, lost overboard, pollution. Confirm against the SDS, EmS, and the Master’s orders before you commit people."
 			})
 		]
 	});
@@ -4837,7 +5693,761 @@ function SheetBlock({ title, items }) {
 		})]
 	});
 }
-function ResponseIndex({ lines, onOpen }) {
+var FAMILY_LABEL = {
+	fire: "Fire",
+	explosion: "Explosion",
+	toxic: "Toxic / asphyxiation",
+	spill: "Spill / leak",
+	wetting: "Water / wetting",
+	heat: "Heat / reefer",
+	stow: "Wrong place",
+	overboard: "Lost overboard",
+	entry: "Hold entry",
+	pollution: "Pollution",
+	report: "CDC / eNOAD",
+	electrical: "Electrical"
+};
+var FAMILY_ORDER = [
+	"stow",
+	"fire",
+	"explosion",
+	"toxic",
+	"spill",
+	"wetting",
+	"heat",
+	"electrical",
+	"overboard",
+	"entry",
+	"pollution",
+	"report"
+];
+var LITHIUM = /^(3090|3091|3480|3481|3536|3171)$/;
+var AN = /^(1942|2067|2426|3375|0222)$/;
+var WET_BATT = /^(2794|2795|2800)$/;
+var POLLUTANT = /^(3077|3082)$/;
+var AEROSOL = /^1950$/;
+function padUn(un) {
+	const d = (un || "").replace(/\D/g, "");
+	return d ? d.padStart(4, "0") : "";
+}
+function clsOf(c) {
+	return (c || "").trim();
+}
+function starts(c, p) {
+	return clsOf(c).startsWith(p);
+}
+function uniq(xs) {
+	return [...new Set(xs.filter(Boolean))];
+}
+function hatchesOf(rows, pred = () => true) {
+	return [...new Set(rows.filter(pred).map((r) => r.hatch).filter((h) => h != null))].sort((a, b) => a - b);
+}
+function unsOf(rows) {
+	return uniq(rows.map((r) => r.un));
+}
+function boxesOf(rows) {
+	return uniq(rows.map((r) => r.container));
+}
+function list(rows, n = 4) {
+	const names = uniq(rows.map((r) => r.un ? `UN ${r.un}` : r.cls || "DG"));
+	if (names.length <= n) return names.join(", ");
+	return `${names.slice(0, n).join(", ")} +${names.length - n}`;
+}
+function hatchList(hs) {
+	if (!hs.length) return "stow not on the papers";
+	return hs.map((h) => `Hatch ${h}`).join(", ");
+}
+function inventory(lines, plan) {
+	const out = [];
+	const onDcm = /* @__PURE__ */ new Set();
+	for (const line of lines) {
+		const stow = resolvedStow(line, plan);
+		const ck = containerKey(line.input.container);
+		if (ck) onDcm.add(ck);
+		out.push({
+			un: padUn(line.un),
+			cls: clsOf(line.hazClass),
+			name: line.name,
+			container: line.input.container || "",
+			hatch: stow?.hatch ?? null,
+			onDeck: stow ? stow.onDeck : null,
+			cdc: line.verdict === "CDC",
+			residue: line.verdict === "CDC_RESIDUE",
+			review: line.verdict === "REVIEW",
+			lq: isLimitedQty(line),
+			pih: line.pih,
+			packForm: line.packForm,
+			kg: line.quantityKg
+		});
+	}
+	if (plan) for (const box of plan.boxes) {
+		const ck = containerKey(box.container);
+		if (ck && onDcm.has(ck)) continue;
+		for (const dg of box.dg) out.push({
+			un: padUn(dg.un),
+			cls: clsOf(dg.cls),
+			name: dg.name,
+			container: box.container,
+			hatch: box.stow?.hatch ?? null,
+			onDeck: box.stow ? box.stow.onDeck : null,
+			cdc: false,
+			residue: false,
+			review: false,
+			lq: false,
+			pih: false,
+			packForm: "unknown",
+			kg: null
+		});
+	}
+	return out;
+}
+function fromIssue(issue, family) {
+	const now = issue.severity === "block" || issue.severity === "seg";
+	return {
+		id: `issue-${issue.id}`,
+		family,
+		severity: now ? "now" : "watch",
+		title: issue.title,
+		why: issue.detail,
+		do: [issue.rule],
+		uns: issue.uns,
+		hatches: issue.hatch ? [issue.hatch] : [],
+		containers: issue.containers
+	};
+}
+function familyOfIssue(issue) {
+	const blob = `${issue.rule} ${issue.title} ${issue.detail}`.toLowerCase();
+	if (blob.includes("heat") || blob.includes("reefer")) return "heat";
+	if (blob.includes("fan") || blob.includes("access")) return "entry";
+	if (blob.includes("overlap") || blob.includes("same cell")) return "stow";
+	if (blob.includes("un ") && blob.includes(" vs ")) return "stow";
+	if (blob.includes("class") && blob.includes(" vs ")) return "stow";
+	return "stow";
+}
+function voyageRisks(lines, plan) {
+	const cargo = inventory(lines, plan);
+	const screen = screenVoyage(lines, plan);
+	const heat = reeferHeatIssues(lines, plan);
+	const out = [];
+	const seen = /* @__PURE__ */ new Set();
+	const push = (r) => {
+		if (seen.has(r.id)) return;
+		seen.add(r.id);
+		out.push(r);
+	};
+	for (const issue of screen.issues) {
+		if (issue.severity === "seg") continue;
+		if (!issue.hatch) continue;
+		push(fromIssue(issue, familyOfIssue(issue)));
+	}
+	const segs = screen.issues.filter((i) => i.severity === "seg");
+	if (segs.length) push({
+		id: "seg-summary",
+		family: "stow",
+		severity: "now",
+		title: segs.length === 1 ? segs[0].title : `${segs.length} segregation hits — boxes that should not sit this close`,
+		why: segs.slice(0, 6).map((s) => s.title).join(" · "),
+		do: ["Open Ship and move one of the pair, or confirm they are LQ / same-UN subsidiary (not a real 176.83 hit).", "Code 2 on the next hatch is the whole cover — that is noisy and intended."],
+		uns: uniq(segs.flatMap((s) => s.uns)),
+		hatches: [...new Set(segs.map((s) => s.hatch).filter(Boolean))],
+		containers: uniq(segs.flatMap((s) => s.containers))
+	});
+	for (const issue of heat) push(fromIssue(issue, "heat"));
+	const dg = cargo.filter((r) => r.un || r.cls);
+	if (!dg.length && !out.length) return [];
+	const full = dg.filter((r) => !r.lq);
+	const lithium = full.filter((r) => LITHIUM.test(r.un));
+	const an = full.filter((r) => AN.test(r.un) || starts(r.cls, "5.1") && /nitrate/i.test(r.name));
+	const cls3 = full.filter((r) => starts(r.cls, "3"));
+	const gas21 = full.filter((r) => starts(r.cls, "2.1") || AEROSOL.test(r.un));
+	const gas23 = full.filter((r) => starts(r.cls, "2.3") || r.pih);
+	const gas22 = full.filter((r) => starts(r.cls, "2.2"));
+	const expl = full.filter((r) => starts(r.cls, "1"));
+	const ox = full.filter((r) => starts(r.cls, "5.1"));
+	const op = full.filter((r) => starts(r.cls, "5.2"));
+	const flSol = full.filter((r) => starts(r.cls, "4.1"));
+	const selfHeat = full.filter((r) => starts(r.cls, "4.2"));
+	const waterRx = full.filter((r) => starts(r.cls, "4.3"));
+	const toxic61 = full.filter((r) => starts(r.cls, "6.1"));
+	const infect = full.filter((r) => starts(r.cls, "6.2"));
+	const rad = full.filter((r) => starts(r.cls, "7"));
+	const corr = full.filter((r) => starts(r.cls, "8"));
+	const batt = full.filter((r) => WET_BATT.test(r.un));
+	const aero = dg.filter((r) => AEROSOL.test(r.un));
+	const poll = dg.filter((r) => POLLUTANT.test(r.un) || /environmentally hazardous/i.test(r.name));
+	const under = full.filter((r) => r.onDeck === false);
+	const deck = full.filter((r) => r.onDeck === true);
+	const hatch1 = full.filter((r) => r.hatch === 1);
+	const hatch10 = full.filter((r) => r.hatch === 10);
+	const cdc = cargo.filter((r) => r.cdc || r.residue);
+	const review = cargo.filter((r) => r.review);
+	const liveRf = plan?.boxes.filter((b) => b.reefer && b.operating) ?? [];
+	if (lithium.length) {
+		const hold = lithium.filter((r) => r.onDeck === false);
+		push({
+			id: "lithium-runaway",
+			family: "fire",
+			severity: "watch",
+			title: "Lithium thermal runaway — long water attack, can reignite for hours",
+			why: `${list(lithium)} on ${hatchList(hatchesOf(lithium))}${hold.length ? ". Under deck: a hold lithium fire is a long, ugly fight." : ". On deck is the less-bad place."}`,
+			do: [
+				"Copious water from cover. Cool the pack and the neighbors. Do not lid it and walk away.",
+				"SCBA — the smoke is toxic. Boundary-cool for hours. Expect reignition.",
+				"If it is in a hold you cannot flood, get people out of that space and keep a charged hose on the bay."
+			],
+			uns: unsOf(lithium),
+			hatches: hatchesOf(lithium),
+			containers: boxesOf(lithium)
+		});
+	}
+	if (cls3.length) {
+		const hold3 = cls3.filter((r) => r.onDeck === false);
+		push({
+			id: "class3-fire",
+			family: "fire",
+			severity: "watch",
+			title: hold3.length ? "Flammable liquid fire — and vapor can explode in a hold" : "Flammable liquid fire — vapor + air, cans burst, runoff carries fire",
+			why: `${list(cls3)} on ${hatchList(hatchesOf(cls3))}. Paint and solvents are the usual ones on this trade.`,
+			do: [
+				"Foam or dry chemical on a pool. Water spray to cool boxes. No straight stream into a tote.",
+				"Ignition control on that hatch. Absorb a spill; keep it out of scuppers if you can boom it.",
+				...hold3.length ? ["Under deck: ventilate, gas-free before entry, no hot work. A hold of gasoline vapor will flash."] : []
+			],
+			uns: unsOf(cls3),
+			hatches: hatchesOf(cls3),
+			containers: boxesOf(cls3)
+		});
+	}
+	if (gas21.length) push({
+		id: "flammable-gas",
+		family: "explosion",
+		severity: "watch",
+		title: "Flammable gas leak — flash-back, BLEVE if a tank is in fire",
+		why: `${list(gas21)} on ${hatchList(hatchesOf(gas21))}. Vapor is heavier than air and will find a hold, a bilge, or the house intakes.`,
+		do: [
+			"Do not extinguish a leaking gas fire unless the leak can be stopped. Cool the tank with water.",
+			"If the tank discolors or vents rise, pull the team back — that is the BLEVE problem.",
+			"Isolate ignition. Ventilate low spaces. Residue last contained in a tank is still a leak/fire problem."
+		],
+		uns: unsOf(gas21),
+		hatches: hatchesOf(gas21),
+		containers: boxesOf(gas21)
+	});
+	if (aero.length) push({
+		id: "aerosol-rockets",
+		family: "explosion",
+		severity: "watch",
+		title: "Aerosol cans rocket and burst in a fire",
+		why: `${list(aero)} — even Ltd Qty cartons still cook off. Do not stand in front of the carton.`,
+		do: ["Water spray from cover. Treat leaking cans as a flammable-mist leak: isolate, no sparks, ventilate."],
+		uns: unsOf(aero),
+		hatches: hatchesOf(aero),
+		containers: boxesOf(aero)
+	});
+	if (expl.length) push({
+		id: "explosives",
+		family: "explosion",
+		severity: "now",
+		title: "Explosives on board — if they are in a fire, withdraw",
+		why: `${list(expl)} on ${hatchList(hatchesOf(expl))}. Class 1.1/1.2 is CDC at any quantity. On GEORGE II, 1.1–1.6 is on-deck only (1.4S may go in Hold 2).`,
+		do: [
+			"If the cargo is not burning: fight from cover, flood adjacent boxes.",
+			"If explosives are involved in fire: withdraw. Do not fight. Cool nearby cargo from a distance.",
+			"Keep ignition and heat (live reefers) off that stack."
+		],
+		uns: unsOf(expl),
+		hatches: hatchesOf(expl),
+		containers: boxesOf(expl)
+	});
+	if (an.length) push({
+		id: "an-decompose",
+		family: "explosion",
+		severity: "watch",
+		title: "Ammonium nitrate — contamination or a hold fire is the Texas City problem",
+		why: `${list(an)} on ${hatchList(hatchesOf(an))}. Bags of AN are a CDC conversation if a 176.415 permit is required.`,
+		do: [
+			"Flood with water. Keep oil, sawdust, and combustibles off it.",
+			"Brown/orange NOx is toxic and can kill hours later — SCBA, medical even if they feel fine.",
+			"If it is in a hold fire you cannot flood, get the people off."
+		],
+		uns: unsOf(an),
+		hatches: hatchesOf(an),
+		containers: boxesOf(an)
+	});
+	else if (ox.length) push({
+		id: "oxidizer-fire",
+		family: "fire",
+		severity: "watch",
+		title: "Oxidizer will feed a fire — do not treat it like ordinary cargo",
+		why: `${list(ox)} on ${hatchList(hatchesOf(ox))}.`,
+		do: ["Flood with water. Dry chemical or foam alone is the wrong tool.", "Keep oil and combustibles off a spill. Decomposition smoke (NOx) needs SCBA."],
+		uns: unsOf(ox),
+		hatches: hatchesOf(ox),
+		containers: boxesOf(ox)
+	});
+	if (op.length) push({
+		id: "organic-peroxide",
+		family: "explosion",
+		severity: "watch",
+		title: "Organic peroxide — heat can run it away",
+		why: `${list(op)} on ${hatchList(hatchesOf(op))}. Keep off live reefers and the engine casing.`,
+		do: ["Cool. Do not stir a decomposing package. Withdraw if it is venting or discoloring.", "On-deck preferred. SDS / EmS for that UN — some want water, some do not."],
+		uns: unsOf(op),
+		hatches: hatchesOf(op),
+		containers: boxesOf(op)
+	});
+	if (flSol.length) push({
+		id: "flammable-solid",
+		family: "fire",
+		severity: "watch",
+		title: "Flammable solid — easy to ignite, some burn fiercely",
+		why: `${list(flSol)} on ${hatchList(hatchesOf(flSol))}. On GEORGE II class 4.1 is on-deck only.`,
+		do: ["Water, foam, or dry chemical per the SDS. Sweep a spill — do not make a dust cloud."],
+		uns: unsOf(flSol),
+		hatches: hatchesOf(flSol),
+		containers: boxesOf(flSol)
+	});
+	if (selfHeat.length) push({
+		id: "self-heating",
+		family: "fire",
+		severity: "watch",
+		title: "Self-heating cargo — it can take off without an outside flame",
+		why: `${list(selfHeat)} on ${hatchList(hatchesOf(selfHeat))}.`,
+		do: ["Watch that stack for heat and smoke. Water may be the wrong tool — check the SDS.", "Keep off live reefers. Ventilate. Do not bury it in a hold if the papers want on-deck."],
+		uns: unsOf(selfHeat),
+		hatches: hatchesOf(selfHeat),
+		containers: boxesOf(selfHeat)
+	});
+	if (waterRx.length) push({
+		id: "water-reactive",
+		family: "wetting",
+		severity: "watch",
+		title: "Water-reactive — fire main, rain in a holed box, or a leaking hold makes flammable gas",
+		why: `${list(waterRx)} on ${hatchList(hatchesOf(waterRx))}.`,
+		do: ["Keep it dry. Do not put a straight stream on a spill unless the SDS says so.", "A flooded hold with 4.3 in it is a hydrogen / fire problem. Know which hatch before the weather turns."],
+		uns: unsOf(waterRx),
+		hatches: hatchesOf(waterRx),
+		containers: boxesOf(waterRx)
+	});
+	if (gas23.length) push({
+		id: "pih-gas",
+		family: "toxic",
+		severity: "now",
+		title: "Poison gas / PIH — a leak can kill on deck in still air, and will kill in a hold",
+		why: `${list(gas23)} on ${hatchList(hatchesOf(gas23))}. Smell is not a warning. CDC if that UN’s vessel total is over 1 MT.`,
+		do: ["Upwind. Isolate. SCBA only — no filter mask. Do not enter holds.", "Keep off the house intakes. Notify USCG if in port. Cool from upwind if it is in a fire; do not walk the plume."],
+		uns: unsOf(gas23),
+		hatches: hatchesOf(gas23),
+		containers: boxesOf(gas23)
+	});
+	if (toxic61.length && !gas23.some((r) => toxic61.includes(r))) {
+		const pihLiq = toxic61.filter((r) => r.pih || r.packForm === "bulk_packaging");
+		push({
+			id: "toxic-61",
+			family: "toxic",
+			severity: pihLiq.length ? "now" : "watch",
+			title: pihLiq.length ? "PIH / toxic liquid — bulk or a big packaged lot is CDC; a leak is still poison" : "Toxic (6.1) — do not touch a leak, do not put it in the bilge",
+			why: `${list(toxic61)} on ${hatchList(hatchesOf(toxic61))}. Packaged 6.1 is on-deck only on GEORGE II.`,
+			do: ["Isolate. SCBA. Do not mouth-to-mouth. Medical help.", "Runoff is still toxic — keep it off the scuppers and out of the hold bilge."],
+			uns: unsOf(toxic61),
+			hatches: hatchesOf(toxic61),
+			containers: boxesOf(toxic61)
+		});
+	}
+	if (gas22.length) push({
+		id: "asphyxiant",
+		family: "toxic",
+		severity: "watch",
+		title: "Non-flammable gas — asphyxiation in a hold or the house",
+		why: `${list(gas22)} on ${hatchList(hatchesOf(gas22))}. Some also support combustion.`,
+		do: ["Do not enter a hold without atmosphere readings and SCBA. Ventilate. Treat empty uncleaned as full."],
+		uns: unsOf(gas22),
+		hatches: hatchesOf(gas22),
+		containers: boxesOf(gas22)
+	});
+	if (infect.length) push({
+		id: "infectious",
+		family: "toxic",
+		severity: "now",
+		title: "Infectious substance — do not touch, do not put people in that hold",
+		why: `${list(infect)} on ${hatchList(hatchesOf(infect))}.`,
+		do: ["Isolate the box. Notify the agent and medical. PPE per the SDS — this is not a mop-and-bucket spill."],
+		uns: unsOf(infect),
+		hatches: hatchesOf(infect),
+		containers: boxesOf(infect)
+	});
+	if (rad.length) push({
+		id: "radioactive",
+		family: "toxic",
+		severity: "watch",
+		title: "Radioactive cargo — isolate, limit time, notify",
+		why: `${list(rad)} on ${hatchList(hatchesOf(rad))}. Excepted packages (UN 2910/2911/2908/2909) are not CDC; HRCQ / fissile controlled is.`,
+		do: ["Do not fight a fire that has involved the package unless you must. Keep time short and distance long.", "Notify the Master and, in port, the Coast Guard. Do not eat, drink, or smoke on that hatch."],
+		uns: unsOf(rad),
+		hatches: hatchesOf(rad),
+		containers: boxesOf(rad)
+	});
+	if (corr.length) push({
+		id: "corrosive",
+		family: "spill",
+		severity: "watch",
+		title: "Corrosive leak — burns people and eats steel; some fume toward the house",
+		why: `${list(corr)} on ${hatchList(hatchesOf(corr))}.`,
+		do: [
+			"Face shield, chemical gloves. Water on skin 15–20 min — do not neutralize on the body.",
+			"Acid: soda ash if you have it, otherwise lots of water on deck. Keep runoff off aluminum and out of the bilge.",
+			"Fuming acids on Hatch 1 will head for the house intakes — know the wind."
+		],
+		uns: unsOf(corr),
+		hatches: hatchesOf(corr),
+		containers: boxesOf(corr)
+	});
+	if (batt.length) push({
+		id: "wet-batteries",
+		family: "electrical",
+		severity: "watch",
+		title: "Wet-cell batteries — acid, hydrogen, and a short that starts a fire",
+		why: `${list(batt)} on ${hatchList(hatchesOf(batt))}. Common pallet cargo on this trade.`,
+		do: ["CO2 or dry chemical on an electrical fire. Do not put a straight stream into a cracked case.", "Keep off lithium boxes and class 5.1. Isolate leaking acid from alkalis and cyanides."],
+		uns: unsOf(batt),
+		hatches: hatchesOf(batt),
+		containers: boxesOf(batt)
+	});
+	if (under.length) push({
+		id: "hold-entry",
+		family: "entry",
+		severity: "watch",
+		title: "DG under deck — confined space, vapor, and a hold fire you may not be able to flood",
+		why: `${list(under)} under deck on ${hatchList(hatchesOf(under))}. Hold 2 (Hatches 3 & 4) is the only under-deck IMDG space on GEORGE II.`,
+		do: ["No entry without atmosphere readings, a permit, and SCBA. Hold 2 is mechanically ventilated — still gas-free.", "After smoke, treat the hold as IDLH until it is proven otherwise."],
+		uns: unsOf(under),
+		hatches: hatchesOf(under),
+		containers: boxesOf(under)
+	});
+	if (deck.length) push({
+		id: "lost-overboard",
+		family: "overboard",
+		severity: "prep",
+		title: "On-deck DG can go over the side — lashing, heavy weather, a holed box",
+		why: `${list(deck, 5)} on deck at ${hatchList(hatchesOf(deck))}. A lost box is still your cargo until someone else has it.`,
+		do: ["Check lashings on DG stacks before weather. Do not sail a damaged DG box on an outboard 05/06 if you can restow.", "Notify: lost DG is a pollution and a notification problem, not just a cargo claim."],
+		uns: unsOf(deck),
+		hatches: hatchesOf(deck),
+		containers: boxesOf(deck)
+	});
+	if (poll.length || cls3.length || corr.length) {
+		const rows = poll.length ? poll : [...cls3, ...corr];
+		push({
+			id: "pollution",
+			family: "pollution",
+			severity: "prep",
+			title: "A leak to the scuppers is a MARPOL problem, not just a deck wash",
+			why: poll.length ? `${list(poll)} is marked environmentally hazardous.` : `Flammable liquid and corrosive on this voyage will ride the scuppers into the harbor.`,
+			do: ["Plug scuppers if you can boom it. Do not pump a DG spill over the side.", "SOPEP / DG locker gear first. In port, call it in — do not wait for a sheen report from the dock."],
+			uns: unsOf(rows),
+			hatches: hatchesOf(rows),
+			containers: boxesOf(rows)
+		});
+	}
+	if (hatch1.length) push({
+		id: "house-intakes",
+		family: "toxic",
+		severity: "watch",
+		title: "Cargo on Hatch 1 sits against the house — vapor goes in the intakes",
+		why: `${list(hatch1)} on Hatch 1. House and conning are forward on GEORGE II.`,
+		do: ["Know the wind before you open a leaking box on Hatch 1. Shut intakes if a plume is heading for the house.", "No smoking, no hot work on that cover."],
+		uns: unsOf(hatch1),
+		hatches: [1],
+		containers: boxesOf(hatch1)
+	});
+	if (hatch10.length) push({
+		id: "hatch10-casing",
+		family: "fire",
+		severity: "watch",
+		title: "Hatch 10 is the engine casing — a fire there is a machinery-space problem",
+		why: `${list(hatch10)} on Hatch 10. Inboard rows 03/04 sit against the casing. The LNG vent mast is plant, not a cargo tank.`,
+		do: ["Keep DG off the inboard casing cells. Cool the casing if that stack is on fire.", "On-deck IMDG is not allowed on Hatch 10 — if a box is there, it is already a CSM hit (see Ship)."],
+		uns: unsOf(hatch10),
+		hatches: [10],
+		containers: boxesOf(hatch10)
+	});
+	if (liveRf.length) push({
+		id: "reefer-fire",
+		family: "electrical",
+		severity: "watch",
+		title: `${liveRf.length} live reefer${liveRf.length === 1 ? "" : "s"} — compressor fire, and heat into the next cell`,
+		why: "Only operating reefers count as a heat source. NOR does not. Motors face aft except bay 6 or 22 below.",
+		do: ["Pull power if you can do it without putting a hand in the smoke. Water to cool the box and neighbors.", "A live reefer next to class 2.1 / 3 / 4 / 5 / lithium is a segregation problem — it will also show on Ship."],
+		uns: [],
+		hatches: [...new Set(liveRf.map((b) => b.stow?.hatch).filter((h) => h != null))],
+		containers: liveRf.map((b) => b.container)
+	});
+	if (cdc.length) push({
+		id: "cdc-report",
+		family: "report",
+		severity: "now",
+		title: "This voyage is Certain Dangerous Cargo — eNOAD and COTP care",
+		why: `${list(cdc)} meets 33 CFR 160.202. Totals are per UN. Paste the boxed block into the NVMC cargo section.`,
+		do: ["Copy the eNOAD packet from Manifest. Do not mix UN 1005 with UN 1017.", "In port, a CDC voyage is extra eyes on the dock. Wrong stow on a CDC box is not just an IMDG miss."],
+		uns: unsOf(cdc),
+		hatches: hatchesOf(cdc),
+		containers: boxesOf(cdc)
+	});
+	else if (review.length) push({
+		id: "cdc-review",
+		family: "report",
+		severity: "watch",
+		title: "CDC is not a yes — but some lines still need a Master decision",
+		why: `${list(review)} came back REVIEW. Do not paste them into eNOAD as CDC unless you confirm 160.202.`,
+		do: ["Open Manifest, read the Need: line, and decide. If you are not sure, report it."],
+		uns: unsOf(review),
+		hatches: hatchesOf(review),
+		containers: boxesOf(review)
+	});
+	else if (dg.length) push({
+		id: "cdc-no",
+		family: "report",
+		severity: "prep",
+		title: "This voyage is not CDC — still paste CDC CARRIED: NO",
+		why: "Containerized general cargo plus a clean negative is what NVMC wants. A wrong YES is as bad as a missed YES.",
+		do: ["Copy the boxed block from Manifest. The packet is a function of the DCM, not the BAPLIE."],
+		uns: [],
+		hatches: [],
+		containers: []
+	});
+	if (dg.length) {
+		push({
+			id: "misdeclared",
+			family: "stow",
+			severity: "prep",
+			title: "Misdeclared cargo is how boxship DG fires start",
+			why: "The DCM and the BAPLIE can disagree on UN and class. A box that says furniture and burns like class 3 is still class 3.",
+			do: ["If DCM UN / class does not match BAPLIE DGS on the same container, pick one — that watch is on Ship.", "A smell, a stain, or a hot box with a clean paper is a misdeclare until proven otherwise. Isolate."],
+			uns: [],
+			hatches: [],
+			containers: []
+		});
+		push({
+			id: "hot-work",
+			family: "fire",
+			severity: "prep",
+			title: "Hot work, smoking, and grinding next to DG",
+			why: "A legal stow still burns if someone welds on that cover or flicks a cigarette into a class 3 stack.",
+			do: ["No hot work on a hatch with full DG without a permit and a charged hose. No smoking on deck period.", "Chipping / grinding on Hatch 1 throws sparks at the house and at whatever is on that cover."],
+			uns: [],
+			hatches: [],
+			containers: []
+		});
+		push({
+			id: "after-smoke",
+			family: "entry",
+			severity: "prep",
+			title: "After smoke or a leak: nobody in that hold, nobody without SCBA",
+			why: "The usual second casualty is the entry, not the box. CO, NOx, HF, HCl, and oxygen depletion all live in the same hatch.",
+			do: ["Atmosphere readings. Permit. SCBA. The mechanical fan on Hold 2 does not make it a coffee shop.", "Medical: delayed NOx and smoke inhalation — send them even if they feel fine."],
+			uns: [],
+			hatches: [],
+			containers: []
+		});
+	}
+	const rank = {
+		now: 0,
+		watch: 1,
+		prep: 2
+	};
+	const fam = Object.fromEntries(FAMILY_ORDER.map((f, i) => [f, i]));
+	out.sort((a, b) => rank[a.severity] - rank[b.severity] || fam[a.family] - fam[b.family]);
+	return out;
+}
+function risksByFamily(risks) {
+	const grouped = /* @__PURE__ */ new Map();
+	for (const r of risks) {
+		const list = grouped.get(r.family) ?? [];
+		list.push(r);
+		grouped.set(r.family, list);
+	}
+	return FAMILY_ORDER.filter((f) => grouped.has(f)).map((f) => ({
+		family: f,
+		label: FAMILY_LABEL[f],
+		items: grouped.get(f) ?? []
+	}));
+}
+var FAMILY_ICON = {
+	fire: Flame,
+	explosion: TriangleAlert,
+	toxic: Wind,
+	spill: Droplets,
+	wetting: Waves,
+	heat: ThermometerSun,
+	stow: MapPin,
+	overboard: Ship,
+	entry: DoorOpen,
+	pollution: Waves,
+	report: FileWarning,
+	electrical: Zap
+};
+var FILTERS = [
+	{
+		id: "all",
+		label: "All"
+	},
+	{
+		id: "now",
+		label: "Already wrong"
+	},
+	...FAMILY_ORDER.map((f) => ({
+		id: f,
+		label: FAMILY_LABEL[f]
+	}))
+];
+function VoyageRisksView({ result, baplie, onOpen }) {
+	const [filter, setFilter] = (0, import_react.useState)("all");
+	const lines = result?.lines ?? [];
+	const risks = (0, import_react.useMemo)(() => voyageRisks(lines, baplie), [lines, baplie]);
+	const groups = risksByFamily(risks.filter((r) => {
+		if (filter === "all") return true;
+		if (filter === "now") return r.severity === "now";
+		return r.family === filter;
+	}));
+	const now = risks.filter((r) => r.severity === "now").length;
+	const watch = risks.filter((r) => r.severity === "watch").length;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "space-y-6",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+					className: "text-xl font-medium",
+					children: "What can go wrong on this voyage"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "mt-1 max-w-3xl text-sm text-muted",
+					children: "Not just spill and fire. This list is built from the DCM and the BAPLIE: fire, explosion, toxic vapor, wetting, heat, hold entry, lost boxes, pollution, and the CDC report. Press a UN for the full sheet."
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "mt-3 flex flex-wrap gap-2",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Badge, {
+							variant: now ? "cdc" : "ok",
+							children: now ? `${now} already wrong` : "Nothing already wrong"
+						}),
+						watch ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
+							variant: "review",
+							children: [watch, " live on this cargo"]
+						}) : null,
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
+							variant: "navy",
+							children: [risks.length, " watches"]
+						})
+					]
+				})
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "flex w-max gap-1 rounded-lg bg-surface-2 p-1",
+					children: FILTERS.filter((f) => f.id === "all" || f.id === "now" || risks.some((r) => r.family === f.id)).map((f) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+						type: "button",
+						onClick: () => setFilter(f.id),
+						className: cn("h-10 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors duration-150", filter === f.id ? "bg-surface text-ink shadow-border" : "text-muted hover:text-ink"),
+						children: f.label
+					}, f.id))
+				})
+			}),
+			groups.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "rounded-lg border bg-surface p-5 text-sm text-muted shadow-border",
+				children: risks.length ? "Nothing in this filter." : "No dangerous goods on the papers we have. Drop a DCM or a BAPLIE with DGS."
+			}) : groups.map((g) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+				className: "space-y-3",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+					className: "text-sm font-medium tracking-wide text-muted uppercase",
+					children: g.label
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+					className: "grid gap-3 lg:grid-cols-2",
+					children: g.items.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RiskCard, {
+						risk: r,
+						onOpen
+					}, r.id))
+				})]
+			}, g.family)),
+			lines.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+				className: "space-y-3",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+					className: "text-sm font-medium",
+					children: "By UN"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "mt-1 text-sm text-muted",
+					children: "Every UN on the DCM. How it looks, how it burns, and the rest."
+				})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UnIndex, {
+					lines,
+					onOpen
+				})]
+			})
+		]
+	});
+}
+function RiskCard({ risk, onOpen }) {
+	const Icon = FAMILY_ICON[risk.family];
+	const un = risk.uns[0];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", {
+		className: cn("rounded-lg border bg-surface p-4 shadow-border", risk.severity === "now" && "border-cdc/40", risk.severity === "watch" && "border-review/30"),
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "flex items-start gap-3",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: cn("mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md", risk.severity === "now" ? "bg-cdc-soft text-cdc" : risk.severity === "watch" ? "bg-review-soft text-review" : "bg-residue-soft text-residue"),
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+					className: "size-4",
+					strokeWidth: 1.75
+				})
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "min-w-0 flex-1",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex flex-wrap items-center gap-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+							className: "font-medium",
+							children: risk.title
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SeverityMark, { severity: risk.severity })]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "mt-1 text-sm text-muted",
+						children: risk.why
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+						className: "mt-2 space-y-1 text-sm text-ink",
+						children: risk.do.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: ["— ", d] }, d))
+					}),
+					(risk.uns.length > 0 || risk.hatches.length > 0) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: "mt-2 font-mono text-xs text-subtle",
+						children: [
+							risk.uns.length ? `UN ${risk.uns.join(", ")}` : "",
+							risk.uns.length && risk.hatches.length ? " · " : "",
+							risk.hatches.length ? risk.hatches.map((h) => `H${h}`).join(" ") : ""
+						]
+					}),
+					un ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+						type: "button",
+						onClick: () => {
+							const sheet = sheetFor(un, "", "");
+							onOpen({
+								un,
+								cls: sheet.cls,
+								name: sheet.name
+							});
+						},
+						className: "mt-3 inline-flex h-10 items-center gap-2 rounded-md bg-navy px-3 text-sm text-primary-foreground",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Radio, { className: "size-4" }),
+							" UN ",
+							un,
+							" sheet"
+						]
+					}) : null
+				]
+			})]
+		})
+	});
+}
+function UnIndex({ lines, onOpen }) {
 	const uns = (0, import_react.useMemo)(() => {
 		const m = /* @__PURE__ */ new Map();
 		for (const l of lines) {
@@ -4879,6 +6489,20 @@ function ResponseIndex({ lines, onOpen }) {
 				]
 			})]
 		}, u.un))
+	});
+}
+function SeverityMark({ severity }) {
+	if (severity === "now") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Badge, {
+		variant: "cdc",
+		children: "Now"
+	});
+	if (severity === "watch") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Badge, {
+		variant: "review",
+		children: "This cargo"
+	});
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Badge, {
+		variant: "navy",
+		children: "Routine"
 	});
 }
 function looksLikeBaplie(text) {
@@ -4923,9 +6547,26 @@ function parseUna(text) {
 		term: "'"
 	};
 }
+/**
+* ISO 6346 reefer equipment:
+* - 3rd character R (22R1, 45R1, L5R1)
+* - 1984 numeric type 30–34 (2230, 4531, 4532)
+* - bare RF / R
+*/
 function isoReefer(iso) {
 	if (!iso) return false;
-	return /^\d{2}R/i.test(iso) || /^[A-Z][0-9]R/i.test(iso);
+	const s = iso.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+	if (s.length < 1) return false;
+	if (s === "R" || s === "RF" || s.startsWith("REEFER")) return true;
+	if (s.length >= 3 && s[2] === "R") return true;
+	if (s.length >= 4 && /^\d{4}/.test(s) && s[2] === "3" && s[3] >= "0" && s[3] <= "4") return true;
+	return false;
+}
+function looksLikeIso(token) {
+	const s = token.trim().toUpperCase();
+	if (!/^[A-Z0-9]{3,4}$/.test(s)) return false;
+	if (/^(6346|102|139|5)$/.test(s)) return false;
+	return true;
 }
 function toC(value, unit) {
 	const n = Number(value);
@@ -5020,7 +6661,15 @@ function parseBaplie(text, filename = "baplie.edi") {
 	let cur = null;
 	let pending = null;
 	let pendingForNextEqd = false;
+	let pendingTmp;
+	let pendingHan = null;
 	let hanMotors = null;
+	const applyHan = (box, code) => {
+		box.han = code;
+		if (/^RF/.test(code) || /REEFER/.test(code)) box.reefer = true;
+		if (/^RFF/.test(code) || /FWD|FORWARD/.test(code)) hanMotors = "fwd";
+		if (/^RFA/.test(code) || /^RFB/.test(code) || /\bAFT\b/.test(code)) hanMotors = "aft";
+	};
 	const flush = () => {
 		if (!cur?.container) return;
 		if (isoReefer(cur.iso)) cur.reefer = true;
@@ -5068,13 +6717,25 @@ function parseBaplie(text, filename = "baplie.edi") {
 		} else if (tag === "EQD") {
 			flush();
 			cur = emptyBox();
-			cur.container = locCode(els[2] || "", una.comp, una.rel).replace(/\s+/g, "").toUpperCase();
+			const idParts = splitReleased(els[2] || "", una.comp, una.rel).map((p) => p.trim());
+			cur.container = (idParts[0] || "").replace(/\s+/g, "").toUpperCase();
 			const iso = locCode(els[3] || "", una.comp, una.rel);
 			if (iso) cur.iso = iso.toUpperCase();
+			else if (idParts[1] && looksLikeIso(idParts[1])) cur.iso = idParts[1].toUpperCase();
 			const full = (els[6] || "").trim() || (els[5] || "").trim();
 			if (full === "5") cur.full = true;
 			if (full === "4") cur.full = false;
 			if (pendingForNextEqd && pending) applyStow(cur, pending.raw, parseStow(pending.raw, cur.iso));
+			if (pendingTmp !== void 0) {
+				cur.tempC = pendingTmp;
+				cur.reefer = true;
+				cur.operating = cur.full !== false;
+				pendingTmp = void 0;
+			}
+			if (pendingHan) {
+				applyHan(cur, pendingHan);
+				pendingHan = null;
+			}
 		} else if (tag === "MEA" && cur) {
 			const joined = els.join(una.data);
 			const m = joined.match(/KGM[:\+]?(\d+(?:\.\d+)?)/i) || joined.match(/LBR[:\+]?(\d+(?:\.\d+)?)/i);
@@ -5082,16 +6743,18 @@ function parseBaplie(text, filename = "baplie.edi") {
 				const n = Number(m[1]);
 				cur.weightKg = /LBR/i.test(m[0]) ? n * .453592 : n;
 			}
-		} else if (tag === "TMP" && cur) {
+		} else if (tag === "TMP") {
 			const valParts = splitReleased(els[2] || "", una.comp, una.rel);
-			cur.tempC = toC(valParts[0] || "", valParts[1] || "");
-			cur.reefer = true;
-			cur.operating = cur.full !== false;
-		} else if (tag === "HAN" && cur) {
+			const tempC = toC(valParts[0] || "", valParts[1] || "");
+			if (cur) {
+				cur.tempC = tempC;
+				cur.reefer = true;
+				cur.operating = cur.full !== false;
+			} else pendingTmp = tempC;
+		} else if (tag === "HAN") {
 			const code = locCode(els[1] || "", una.comp, una.rel).toUpperCase();
-			cur.han = code;
-			if (/^RFF/.test(code) || /FWD|FORWARD/.test(code)) hanMotors = "fwd";
-			if (/^RFA/.test(code) || /^RFB/.test(code) || /\bAFT\b/.test(code)) hanMotors = "aft";
+			if (cur) applyHan(cur, code);
+			else pendingHan = code;
 		} else if (tag === "DGS" && cur) cur.dg.push(parseDgs(els, una.comp, una.rel));
 		else if (tag === "FTX" && cur) {
 			const q = els[1]?.trim();
@@ -5108,39 +6771,6 @@ function parseBaplie(text, filename = "baplie.edi") {
 	if (noStow) plan.warnings.push(`${noStow} boxes have no LOC+147 stowage.`);
 	return plan;
 }
-/** Tiny GEORGE II-style BAPLIE for the example button. */
-var SAMPLE_BAPLIE = `UNA:+.? '
-UNB+UNOA:2+PASHA+GEORGEII+260908:1200+1'
-UNH+1+BAPLIE:D:95B:UN:SMDG22'
-BGM+34+G2069W+9'
-DTM+137:20260908:102'
-TDT+20+G2069W+1++PHK:172:20+++8012487:103:GEORGE II'
-LOC+5+USLGB:139:6'
-LOC+61+USHNL:139:6'
-EQD+CN+RFRA0000001+45R1:102:5++2+5'
-LOC+147+0180284:139:5'
-MEA+WT+G+KGM:28000'
-TMP+2+-18:CEL'
-LOC+9+USHNL:139:6'
-EQD+CN+DGPA0000002+45G1:102:5++2+5'
-LOC+147+0180184:139:5'
-MEA+WT+G+KGM:18000'
-DGS+IMD+3+1263+III'
-FTX+AAD+++PAINT'
-LOC+9+USHNL:139:6'
-EQD+CN+DRYA0000003+45G1:102:5++2+5'
-LOC+147+0181184:139:5'
-MEA+WT+G+KGM:22000'
-LOC+9+USHNL:139:6'
-EQD+CN+RFRA0000004+22R1:102:5++2+5'
-LOC+147+0060504:139:5'
-MEA+WT+G+KGM:24000'
-TMP+2+2:CEL'
-EQD+CN+NORA0000005+45R1:102:5++2+4'
-LOC+147+0180186:139:5'
-UNT+30+1'
-UNZ+1+1'
-`;
 var KEY = "cdc-enoad-baplie-v1";
 function saveBaplie(plan) {
 	if (typeof window === "undefined") return;
@@ -5164,6 +6794,535 @@ function loadBaplie() {
 		return null;
 	}
 }
+/** 1 metric tonne = 1 000 kg. */
+var KG_PER_MT = 1e3;
+/** 1 long ton = 2 240 lb = 1 016.0469088 kg. */
+var KG_PER_LT = 2240 * .45359237;
+var PORT_NAMES = {
+	USHNL: "Honolulu",
+	USHN: "Honolulu",
+	USOGG: "Kahului",
+	USHLI: "Hilo",
+	USNAW: "Nawiliwili",
+	USLGB: "Long Beach",
+	USLG: "Long Beach",
+	USLAX: "Los Angeles",
+	USOAK: "Oakland",
+	USSEA: "Seattle",
+	USTIW: "Tacoma",
+	USSAN: "San Diego",
+	USPDX: "Portland",
+	USNYC: "New York",
+	USORF: "Norfolk",
+	USCHS: "Charleston",
+	USHOU: "Houston",
+	USMIA: "Miami",
+	USJAX: "Jacksonville",
+	GUGUM: "Guam",
+	MPSPN: "Saipan",
+	ASPPG: "Pago Pago",
+	SGSIN: "Singapore",
+	SGS: "Singapore",
+	HKHKG: "Hong Kong",
+	TWKHH: "Kaohsiung",
+	CNNGB: "Ningbo",
+	CNSHA: "Shanghai",
+	CNSZX: "Shenzhen",
+	KRPUS: "Busan",
+	JPTYO: "Tokyo",
+	JPYOK: "Yokohama",
+	JPOSA: "Osaka",
+	JPNGY: "Nagoya",
+	PHMNL: "Manila",
+	VNSGN: "Ho Chi Minh",
+	VNHPH: "Haiphong",
+	THLCH: "Laem Chabang",
+	MYPKG: "Port Klang",
+	IDJKT: "Jakarta",
+	AUSYD: "Sydney",
+	AUMEL: "Melbourne",
+	NZAKL: "Auckland",
+	MXZLO: "Manzanillo",
+	PACFZ: "Colon",
+	CAVAN: "Vancouver"
+};
+function locode(raw) {
+	return (raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
+}
+function portName(code) {
+	const c = locode(code);
+	if (!c || c === "UNSTATED") return "Not stated";
+	return PORT_NAMES[c] || PORT_NAMES[c.slice(0, 4)] || PORT_NAMES[c.slice(0, 3)] || c;
+}
+function kgToMt(kg) {
+	return kg / KG_PER_MT;
+}
+function kgToLt(kg) {
+	return kg / KG_PER_LT;
+}
+function formatTons(n) {
+	return n.toLocaleString("en-US", {
+		minimumFractionDigits: 1,
+		maximumFractionDigits: 1
+	});
+}
+/** ISO 6346 first char: 2 = 20', 4 = 40' (incl. 45G1 high cube), L = 45'. */
+function boxSize(box) {
+	const c = (box.iso || "").trim().toUpperCase()[0];
+	if (c === "2") return "20";
+	if (c === "L") return "45";
+	if (c === "4") return "40";
+	if (c === "M" || c === "P") return "other";
+	if (box.stow?.fortyFoot === false) return "20";
+	if (box.stow?.fortyFoot === true) return "40";
+	return "other";
+}
+/** Second ISO char 5 = 9'6" high cube (45G1, L5G1, 25G1). */
+function isHighCube(box) {
+	const s = (box.iso || "").trim().toUpperCase();
+	return s.length >= 2 && s[1] === "5";
+}
+function teuOf(size) {
+	return size === "20" ? 1 : 2;
+}
+function blank(code, name) {
+	return {
+		code,
+		name,
+		units: 0,
+		teu: 0,
+		kg: 0,
+		twenty: 0,
+		forty: 0,
+		fortyFive: 0,
+		other: 0,
+		hc: 0,
+		full: 0,
+		empty: 0,
+		rf: 0,
+		live: 0,
+		dry: 0,
+		dg: 0,
+		missingWeight: 0
+	};
+}
+function addBox(t, box) {
+	t.units += 1;
+	const size = boxSize(box);
+	t.teu += teuOf(size);
+	if (size === "20") t.twenty += 1;
+	else if (size === "40") t.forty += 1;
+	else if (size === "45") t.fortyFive += 1;
+	else t.other += 1;
+	if (isHighCube(box)) t.hc += 1;
+	if (box.full === false) t.empty += 1;
+	else t.full += 1;
+	if (box.reefer) {
+		t.rf += 1;
+		if (box.operating) t.live += 1;
+	} else t.dry += 1;
+	if (box.dg.length) t.dg += 1;
+	if (box.weightKg != null && Number.isFinite(box.weightKg)) t.kg += box.weightKg;
+	else t.missingWeight += 1;
+}
+function dischargeOf(box, plan) {
+	return locode(box.pod || box.finalPod || box.transship || plan.pod) || "UNSTATED";
+}
+function classKey(cls) {
+	return cls.replace(/[^0-9.]/g, "") || cls.trim() || "?";
+}
+function summarizePlan(plan) {
+	const totals = blank("TOTAL", "On board");
+	const deck = blank("DECK", "On deck");
+	const hold = blank("HOLD", "Below");
+	const unplaced = blank("UNPLACED", "Unplaced");
+	const byPort = /* @__PURE__ */ new Map();
+	const byHatch = /* @__PURE__ */ new Map();
+	const byClass = /* @__PURE__ */ new Map();
+	for (const box of plan.boxes) {
+		const code = dischargeOf(box, plan);
+		let port = byPort.get(code);
+		if (!port) {
+			port = blank(code, portName(code));
+			byPort.set(code, port);
+		}
+		addBox(port, box);
+		addBox(totals, box);
+		if (!box.stow) addBox(unplaced, box);
+		else if (box.stow.onDeck) addBox(deck, box);
+		else addBox(hold, box);
+		if (box.stow?.hatch) {
+			let h = byHatch.get(box.stow.hatch);
+			if (!h) {
+				h = {
+					hatch: box.stow.hatch,
+					units: 0,
+					dg: 0,
+					rf: 0
+				};
+				byHatch.set(box.stow.hatch, h);
+			}
+			h.units += 1;
+			if (box.dg.length) h.dg += 1;
+			if (box.reefer) h.rf += 1;
+		}
+		if (box.dg.length) for (const d of box.dg) {
+			const cls = classKey(d.cls);
+			let g = byClass.get(cls);
+			if (!g) {
+				g = {
+					boxes: /* @__PURE__ */ new Set(),
+					uns: /* @__PURE__ */ new Set()
+				};
+				byClass.set(cls, g);
+			}
+			g.boxes.add(box.container || "?");
+			if (d.un) g.uns.add(d.un);
+		}
+	}
+	const ports = [...byPort.values()].sort((a, b) => {
+		if (a.code === "UNSTATED") return 1;
+		if (b.code === "UNSTATED") return -1;
+		if (b.units !== a.units) return b.units - a.units;
+		return a.code.localeCompare(b.code);
+	});
+	const dgClasses = [...byClass.entries()].map(([cls, g]) => ({
+		cls,
+		boxes: g.boxes.size,
+		uns: [...g.uns].sort()
+	})).sort((a, b) => parseFloat(a.cls) - parseFloat(b.cls) || a.cls.localeCompare(b.cls));
+	const hatches = [...byHatch.values()].sort((a, b) => a.hatch - b.hatch);
+	return {
+		vessel: plan.vessel,
+		voyage: plan.voyage,
+		sourceName: plan.sourceName,
+		pol: plan.pol,
+		pod: plan.pod,
+		ports,
+		totals,
+		deck,
+		hold,
+		unplaced,
+		dgClasses,
+		hatches
+	};
+}
+function tallyLine(t) {
+	const mt = t.missingWeight === t.units && t.units > 0 ? "—" : formatTons(kgToMt(t.kg));
+	const lt = t.missingWeight === t.units && t.units > 0 ? "—" : formatTons(kgToLt(t.kg));
+	return [
+		t.name,
+		t.units,
+		t.teu,
+		mt,
+		lt,
+		t.twenty,
+		t.forty,
+		t.fortyFive,
+		t.full,
+		t.empty,
+		t.rf,
+		t.live,
+		t.dry,
+		t.dg
+	].join("	");
+}
+function summaryText(s) {
+	const head = [
+		"Discharge",
+		"Units",
+		"TEU",
+		"MT",
+		"LT",
+		"20'",
+		"40'",
+		"45'",
+		"Full",
+		"Empty",
+		"RF",
+		"Live",
+		"Dry",
+		"DG"
+	].join("	");
+	const title = [
+		s.vessel,
+		s.voyage,
+		s.sourceName
+	].filter(Boolean).join(" · ");
+	const rows = s.ports.map(tallyLine);
+	rows.push(tallyLine(s.totals));
+	const place = `On deck ${s.deck.units} · Below ${s.hold.units} · Unplaced ${s.unplaced.units}`;
+	const dg = s.dgClasses.length === 0 ? "No DGS in this BAPLIE." : `DG: ${s.dgClasses.map((d) => `class ${d.cls} × ${d.boxes}`).join(" · ")}`;
+	return [
+		`${title}`,
+		head,
+		...rows,
+		place,
+		dg,
+		"Gross container weight (MEA). 1 LT = 2,240 lb. Not DG net."
+	].join("\n");
+}
+function tonsCell(t, kind) {
+	if (t.units > 0 && t.missingWeight === t.units) return "—";
+	return formatTons(kind === "mt" ? kgToMt(t.kg) : kgToLt(t.kg));
+}
+function TallyRow({ t, code, total }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+		className: cn("border-b border-border last:border-0", total && "bg-surface-2 font-medium"),
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", {
+				className: cn("sticky left-0 z-10 px-3 py-2 sm:px-4", total ? "bg-surface-2" : "bg-surface"),
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: t.name }), code && code !== "UNSTATED" && code !== "TOTAL" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "font-mono text-[11px] text-muted",
+					children: code
+				}) : null]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "px-2 py-2 text-right font-mono tabular-nums",
+				children: t.units
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "px-2 py-2 text-right font-mono tabular-nums",
+				children: t.teu
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "px-2 py-2 text-right font-mono tabular-nums",
+				children: tonsCell(t, "mt")
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "px-2 py-2 text-right font-mono tabular-nums",
+				children: tonsCell(t, "lt")
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "px-2 py-2 text-right font-mono tabular-nums",
+				children: t.twenty
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "px-2 py-2 text-right font-mono tabular-nums",
+				children: t.forty
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "px-2 py-2 text-right font-mono tabular-nums",
+				children: t.fortyFive
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "px-2 py-2 text-right font-mono tabular-nums",
+				children: t.full
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "px-2 py-2 text-right font-mono tabular-nums",
+				children: t.empty
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "px-2 py-2 text-right font-mono tabular-nums",
+				children: t.rf
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "px-2 py-2 text-right font-mono tabular-nums",
+				children: t.live
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "px-2 py-2 text-right font-mono tabular-nums",
+				children: t.dry
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: cn("px-3 py-2 text-right font-mono tabular-nums sm:px-4", t.dg > 0 && "text-cdc"),
+				children: t.dg
+			})
+		]
+	});
+}
+function BaplieSummary({ plan }) {
+	const summary = (0, import_react.useMemo)(() => summarizePlan(plan), [plan]);
+	const [copied, setCopied] = (0, import_react.useState)(false);
+	const t = summary.totals;
+	const showOther = t.other > 0;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		id: "baplie-onboard",
+		className: "overflow-hidden rounded-lg border border-border bg-surface-2/40",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "flex flex-wrap items-start justify-between gap-2 border-b border-border px-3 py-2.5 sm:px-4",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "font-mono text-[11px] tracking-[0.16em] text-muted uppercase",
+						children: "On board"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: "mt-0.5 text-sm font-medium",
+						children: [
+							t.units.toLocaleString("en-US"),
+							" boxes · ",
+							t.teu.toLocaleString("en-US"),
+							" TEU · ",
+							tonsCell(t, "mt"),
+							" ",
+							"MT / ",
+							tonsCell(t, "lt"),
+							" LT"
+						]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "mt-0.5 text-xs text-muted",
+						children: [summary.pol ? `Loaded ${portName(summary.pol)} (${locode(summary.pol)})` : null, summary.pod ? `voyage POD ${portName(summary.pod)}` : "By discharge port."].filter(Boolean).join(" · ")
+					})
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
+					variant: "ghost",
+					size: "sm",
+					onClick: async () => {
+						try {
+							await navigator.clipboard.writeText(summaryText(summary));
+							setCopied(true);
+							window.setTimeout(() => setCopied(false), 1600);
+						} catch {}
+					},
+					children: [copied ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Check, {}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClipboardCopy, {}), copied ? "Copied" : "Copy"]
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "overflow-x-auto",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
+					className: "w-full min-w-[860px] text-left text-xs",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+						className: "border-b border-border text-[11px] tracking-wide text-muted uppercase",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+								className: "sticky left-0 z-10 bg-surface-2 px-3 py-2 font-medium sm:px-4",
+								children: "Discharge"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+								className: "px-2 py-2 text-right font-medium",
+								children: "Units"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+								className: "px-2 py-2 text-right font-medium",
+								children: "TEU"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+								className: "px-2 py-2 text-right font-medium",
+								children: "MT"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+								className: "px-2 py-2 text-right font-medium",
+								children: "LT"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+								className: "px-2 py-2 text-right font-medium",
+								children: "20'"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+								className: "px-2 py-2 text-right font-medium",
+								children: "40'"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+								className: "px-2 py-2 text-right font-medium",
+								children: "45'"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+								className: "px-2 py-2 text-right font-medium",
+								children: "Full"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+								className: "px-2 py-2 text-right font-medium",
+								children: "Empty"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+								className: "px-2 py-2 text-right font-medium",
+								children: "RF"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+								className: "px-2 py-2 text-right font-medium",
+								children: "Live"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+								className: "px-2 py-2 text-right font-medium",
+								children: "Dry"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+								className: "px-3 py-2 text-right font-medium sm:px-4",
+								children: "DG"
+							})
+						]
+					}) }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tbody", { children: [summary.ports.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TallyRow, {
+						t: p,
+						code: p.code
+					}, p.code)), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TallyRow, {
+						t,
+						total: true
+					})] })]
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "flex flex-col gap-2 border-t border-border px-3 py-2.5 sm:px-4",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex flex-wrap gap-1.5",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
+								variant: "navy",
+								children: ["On deck ", summary.deck.units]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
+								variant: "muted",
+								children: ["Below ", summary.hold.units]
+							}),
+							summary.unplaced.units ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
+								variant: "review",
+								children: ["Unplaced ", summary.unplaced.units]
+							}) : null,
+							t.hc ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
+								variant: "muted",
+								children: ["HC 9'6\" ", t.hc]
+							}) : null,
+							showOther ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
+								variant: "review",
+								children: ["Other size ", t.other]
+							}) : null,
+							t.missingWeight ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
+								variant: "review",
+								children: ["No MEA ", t.missingWeight]
+							}) : null
+						]
+					}),
+					summary.hatches.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: "font-mono text-[11px] leading-relaxed text-muted",
+						children: [
+							"Hatches",
+							" ",
+							summary.hatches.map((h) => `H${h.hatch} ${h.units}${h.dg ? `/${h.dg} DG` : ""}`).join(" · ")
+						]
+					}) : null,
+					summary.dgClasses.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: "text-xs",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+							className: "text-cdc",
+							children: [
+								t.dg,
+								" DG ",
+								t.dg === 1 ? "box" : "boxes"
+							]
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+							className: "text-muted",
+							children: [
+								" ",
+								"·",
+								" ",
+								summary.dgClasses.map((d) => `class ${d.cls} × ${d.boxes}${d.uns.length ? ` (UN ${d.uns.join(", ")})` : ""}`).join(" · ")
+							]
+						})]
+					}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "text-xs text-muted",
+						children: "No DGS in this BAPLIE — DG column stays 0 until the plan carries it."
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "text-[11px] text-subtle",
+						children: "Weight is container gross from MEA (tare + cargo), in metric tonnes and long tons (1 LT = 2,240 lb). Not DG net. 20' = 1 TEU; 40' and 45' = 2 TEU. ISO 45G1 is a 40' high cube; a true 45' is ISO L. Live = reefer with a set temperature."
+					})
+				]
+			})
+		]
+	});
+}
 function Screener() {
 	const [tab, setTab] = (0, import_react.useState)("manifest");
 	const [parsed, setParsed] = (0, import_react.useState)(null);
@@ -5185,7 +7344,9 @@ function Screener() {
 			setParsed(restored);
 			setResult(evaluateManifest(stored.lines, CONTAINER_OPTIONS));
 		}
-		setBaplie(loadBaplie());
+		const plan = loadBaplie();
+		if (plan && isDemoSource(plan.sourceName)) saveBaplie(null);
+		else setBaplie(plan);
 	}, []);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "min-h-dvh bg-bg",
@@ -5210,24 +7371,16 @@ function Screener() {
 					baplie
 				}),
 				tab === "ship" && !result && !baplie && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NeedVoyage, { onGo: () => setTab("manifest") }),
-				tab === "response" && result && !chem && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "space-y-4",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
-						className: "text-xl font-medium",
-						children: "Spill and fire sheets"
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-						className: "mt-1 text-sm text-muted",
-						children: "Every UN on this voyage. Press a line for how it looks, how it burns, and what to do on GEORGE II."
-					})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ResponseIndex, {
-						lines: result.lines,
-						onOpen: setChem
-					})]
+				tab === "response" && (result || baplie) && !chem && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VoyageRisksView, {
+					result,
+					baplie,
+					onOpen: setChem
 				}),
 				tab === "response" && chem && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChemicalView, {
 					sheet: sheetFor(chem.un, chem.cls, chem.name),
 					onBack: () => setChem(null)
 				}),
-				tab === "response" && !result && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NeedVoyage, { onGo: () => setTab("manifest") }),
+				tab === "response" && !result && !baplie && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NeedVoyage, { onGo: () => setTab("manifest") }),
 				tab === "lookup" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LookupPanel, {}),
 				tab === "rules" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RulesPanel, {})
 			]
@@ -5252,15 +7405,15 @@ function Header({ tab, onTab, hasVoyage }) {
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "font-mono text-[11px] tracking-[0.18em] text-primary-foreground/60 uppercase",
-							children: "Container ship · USCG eNOAD · 33 CFR 160.202"
+							children: "Container ship · DCM + BAPLIE · 33 CFR 160.202"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
 							className: "mt-1 text-xl font-medium tracking-tight sm:text-2xl",
-							children: "Certain Dangerous Cargo for the Master"
+							children: "Cargo and DCM Viewer"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "mt-1 max-w-2xl text-sm text-primary-foreground/70",
-							children: "Drop the Excel DCM, the Word FINAL DCM, and the printed manifest. CDC is screened from that voyage. BAPLIE is optional — drop it when you want reefers and the rest of the bay plan."
+							children: "Drop the Excel DCM, the Word FINAL DCM, and the printed manifest. Stow and CDC come from that voyage. BAPLIE is optional. Open What can go wrong for fire, explosion, toxic vapor, wetting, hold entry, lost boxes, and the rest."
 						})
 					] })]
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Badge, {
@@ -5269,18 +7422,18 @@ function Header({ tab, onTab, hasVoyage }) {
 					children: "Container ships only"
 				})]
 			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("nav", {
-				className: "flex flex-wrap gap-1 rounded-lg bg-navy-2 p-1",
+				className: "flex flex-wrap gap-1 overflow-x-auto rounded-lg bg-navy-2 p-1",
 				"aria-label": "Primary",
 				children: [
 					["manifest", "Manifest"],
 					["ship", "Ship"],
-					["response", "Spill / fire"],
+					["response", "What can go wrong"],
 					["lookup", "UN lookup"],
 					["rules", "33 CFR 160.202"]
 				].map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 					type: "button",
 					onClick: () => onTab(id),
-					className: cn("h-10 flex-1 rounded-md px-3 text-sm font-medium transition-colors duration-150 sm:flex-none sm:px-5", tab === id ? "bg-surface text-ink" : "text-primary-foreground/70 hover:text-primary-foreground"),
+					className: cn("h-10 shrink-0 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors duration-150 sm:px-5", tab === id ? "bg-surface text-ink" : "text-primary-foreground/70 hover:text-primary-foreground"),
 					children: id === "ship" && hasVoyage ? `${label} ·` : label
 				}, id))
 			})]
@@ -5324,7 +7477,7 @@ function ManifestPanel({ parsed, result, baplie, setParsed, setResult, setBaplie
 	const baplieRef = (0, import_react.useRef)(null);
 	(0, import_react.useEffect)(() => {
 		setMounted(true);
-		setLog(loadVoyageLog());
+		setLog(loadVoyageLog().filter((e) => !isDemoSource(e.sourceName)));
 	}, []);
 	function applyParsed(next) {
 		if (next.lines.length === 0) {
@@ -5439,14 +7592,8 @@ function ManifestPanel({ parsed, result, baplie, setParsed, setResult, setBaplie
 			setProgress(null);
 		}
 	}
-	function loadSample(text, name) {
-		const next = parseManifest(text, "lb");
-		next.sourceName = name;
-		applyParsed(next);
-	}
 	const flaggedCount = result ? result.cdc + result.residue + result.review : 0;
-	const cartonFallback = result ? !hasExplicitLqMarks(result.lines) : false;
-	const lqCount = result ? result.lines.filter((l) => isLimitedQty(l, cartonFallback)).length : 0;
+	const lqCount = result ? result.lines.filter((l) => isLimitedQty(l)).length : 0;
 	const fullCount = result ? result.total - lqCount : 0;
 	const filtered = (0, import_react.useMemo)(() => {
 		if (!result) return [];
@@ -5456,8 +7603,8 @@ function ManifestPanel({ parsed, result, baplie, setParsed, setResult, setBaplie
 			if (filter === "CDC" && l.verdict !== "CDC" && l.verdict !== "CDC_RESIDUE") return false;
 			if (filter === "REVIEW" && l.verdict !== "REVIEW") return false;
 			if (filter === "NOT_CDC" && l.verdict !== "NOT_CDC") return false;
-			if (filter === "full" && isLimitedQty(l, cartonFallback)) return false;
-			if (filter === "lq" && !isLimitedQty(l, cartonFallback)) return false;
+			if (filter === "full" && isLimitedQty(l)) return false;
+			if (filter === "lq" && !isLimitedQty(l)) return false;
 			if (!needle) return true;
 			return [
 				l.un,
@@ -5467,10 +7614,10 @@ function ManifestPanel({ parsed, result, baplie, setParsed, setResult, setBaplie
 				l.input.container,
 				l.input.booking,
 				l.input.technicalName,
-				isLimitedQty(l, cartonFallback) ? "ltd qty limited" : "full dg"
+				isLimitedQty(l) ? "ltd qty limited" : "full dg"
 			].filter(Boolean).join(" ").toLowerCase().includes(needle);
 		}).sort((a, b) => {
-			const lq = Number(isLimitedQty(a, cartonFallback)) - Number(isLimitedQty(b, cartonFallback));
+			const lq = Number(isLimitedQty(a)) - Number(isLimitedQty(b));
 			if (lq) return lq;
 			const ca = (a.input.container || "").toUpperCase();
 			const cb = (b.input.container || "").toUpperCase();
@@ -5480,8 +7627,7 @@ function ManifestPanel({ parsed, result, baplie, setParsed, setResult, setBaplie
 	}, [
 		result,
 		filter,
-		query,
-		cartonFallback
+		query
 	]);
 	function onDrop(e) {
 		e.preventDefault();
@@ -5554,41 +7700,27 @@ function ManifestPanel({ parsed, result, baplie, setParsed, setResult, setBaplie
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "flex flex-wrap gap-2",
-							children: [
-								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
-									variant: "outline",
-									size: "sm",
-									onClick: () => loadSample(PASHA_SAMPLE, "pasha-style-sample.tsv"),
-									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileSpreadsheet, {}), "Pasha-style sample"]
-								}),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
-									variant: "outline",
-									size: "sm",
-									onClick: () => loadSample(WORKED_SAMPLE, "worked-cdc-example.tsv"),
-									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileText, {}), "Example with CDC"]
-								}),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
-									variant: "ghost",
-									size: "sm",
-									onClick: () => setShowPaste((v) => !v),
-									children: "Paste instead"
-								}),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
-									variant: "ghost",
-									size: "sm",
-									className: "ml-auto",
-									onClick: () => {
-										setParsed(null);
-										setResult(null);
-										setError(null);
-										setPasteText("");
-										setRestored(null);
-										setQuery("");
-										setCompare(null);
-									},
-									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Eraser, {}), "Clear DCM"]
-								})
-							]
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+								variant: "ghost",
+								size: "sm",
+								onClick: () => setShowPaste((v) => !v),
+								children: "Paste instead"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
+								variant: "ghost",
+								size: "sm",
+								className: "ml-auto",
+								onClick: () => {
+									setParsed(null);
+									setResult(null);
+									setError(null);
+									setPasteText("");
+									setRestored(null);
+									setQuery("");
+									setCompare(null);
+									clearCargo();
+								},
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Eraser, {}), "Clear DCM"]
+							})]
 						}),
 						showPaste ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "flex flex-col gap-2",
@@ -5616,6 +7748,7 @@ function ManifestPanel({ parsed, result, baplie, setParsed, setResult, setBaplie
 				})
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
+				id: "baplie-panel",
 				className: "rounded-xl bg-surface p-4 shadow-[var(--shadow-border)] sm:p-5",
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "flex flex-col gap-3",
@@ -5652,18 +7785,9 @@ function ManifestPanel({ parsed, result, baplie, setParsed, setResult, setBaplie
 								})
 							]
 						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						baplie ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "flex flex-wrap items-center gap-2",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
-								variant: "outline",
-								size: "sm",
-								onClick: () => {
-									const plan = parseBaplie(SAMPLE_BAPLIE, "sample-george-ii.edi");
-									setBaplie(plan);
-									saveBaplie(plan);
-								},
-								children: "Example BAPLIE"
-							}), baplie ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+							children: [
 								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Badge, {
 									variant: "navy",
 									children: [
@@ -5691,12 +7815,13 @@ function ManifestPanel({ parsed, result, baplie, setParsed, setResult, setBaplie
 									},
 									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Eraser, {}), "Clear BAPLIE"]
 								})
-							] }) : null]
-						}),
+							]
+						}) : null,
 						baplie?.warnings.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "text-xs text-review",
 							children: baplie.warnings.join(" ")
-						}) : null
+						}) : null,
+						baplie ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BaplieSummary, { plan: baplie }) : null
 					]
 				})
 			}),
@@ -5758,7 +7883,6 @@ function ManifestPanel({ parsed, result, baplie, setParsed, setResult, setBaplie
 							query,
 							flaggedCount,
 							total: result.total,
-							cartonFallback,
 							onShowAll: () => setFilter("all")
 						})]
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", {
@@ -6187,7 +8311,7 @@ function Stats({ result }) {
 		}, s.label))
 	});
 }
-function ResultsTable({ rows, filter, query, flaggedCount, total, cartonFallback, onShowAll }) {
+function ResultsTable({ rows, filter, query, flaggedCount, total, onShowAll }) {
 	if (rows.length === 0) {
 		const nothingFlagged = filter === "flagged" && flaggedCount === 0 && !query;
 		return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -6259,7 +8383,7 @@ function ResultsTable({ rows, filter, query, flaggedCount, total, cartonFallback
 								row.hazClass || "—",
 								row.input.subsidiary ? ` (${row.input.subsidiary})` : "",
 								row.pih ? " · PIH" : "",
-								isLimitedQty(row, cartonFallback) ? " · Ltd qty" : "",
+								isLimitedQty(row) ? " · Ltd qty" : "",
 								row.input.container ? ` · ${row.input.container}` : ""
 							]
 						})]
@@ -6324,105 +8448,148 @@ function LookupPanel() {
 	const hint = lookupUn(un.replace(/\D/g, "").padStart(4, "0"));
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "mx-auto grid max-w-3xl gap-6",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
-			className: "rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]",
-			children: [
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
-					className: "text-base font-medium",
-					children: "Single UN check"
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-					className: "mt-1 text-sm text-muted",
-					children: "Container-ship packaging. Quantity is pounds, same as the DCM."
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "mt-5 grid gap-3 sm:grid-cols-2",
-					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, {
-							label: "UN / NA number",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
-								value: un,
-								onChange: (e) => setUn(e.target.value),
-								className: "font-mono"
-							}), hint ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-								className: "mt-1 text-xs text-muted",
-								children: [
-									hint.name,
-									" · Class ",
-									hint.cls,
-									hint.zone ? ` · PIH Zone ${hint.zone}` : ""
-								]
-							}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-								className: "mt-1 text-xs text-subtle",
-								children: "Not in the local catalog — class rules still apply."
-							})]
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
-							label: "Hazard class (optional override)",
-							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
-								value: cls,
-								onChange: (e) => setCls(e.target.value),
-								placeholder: hint?.cls || "6.1"
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+				className: "rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+						className: "text-base font-medium",
+						children: "Single UN check"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "mt-1 text-sm text-muted",
+						children: "Container-ship packaging. Quantity is pounds, same as the DCM."
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "mt-5 grid gap-3 sm:grid-cols-2",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, {
+								label: "UN / NA number",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
+									value: un,
+									onChange: (e) => setUn(e.target.value),
+									className: "font-mono"
+								}), hint ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+									className: "mt-1 text-xs text-muted",
+									children: [
+										hint.name,
+										" · Class ",
+										hint.cls,
+										hint.zone ? ` · PIH Zone ${hint.zone}` : ""
+									]
+								}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+									className: "mt-1 text-xs text-subtle",
+									children: "Not in the local catalog — class rules still apply."
+								})]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
+								label: "Hazard class (optional override)",
+								children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
+									value: cls,
+									onChange: (e) => setCls(e.target.value),
+									placeholder: hint?.cls || "6.1"
+								})
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
+								label: "Packaging (CN / CY / BX / TANK)",
+								children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
+									value: pkg,
+									onChange: (e) => setPkg(e.target.value)
+								})
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
+								label: "Net quantity (lb)",
+								children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
+									value: qty,
+									onChange: (e) => setQty(e.target.value),
+									inputMode: "decimal"
+								})
 							})
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
-							label: "Packaging (CN / CY / BX / TANK)",
-							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
-								value: pkg,
-								onChange: (e) => setPkg(e.target.value)
-							})
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
-							label: "Net quantity (lb)",
-							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
-								value: qty,
-								onChange: (e) => setQty(e.target.value),
-								inputMode: "decimal"
-							})
-						})
-					]
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
-					className: "mt-5",
-					onClick: screen,
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Search, {}), "Evaluate"]
-				})
-			]
-		}), row ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
-			className: "rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]",
-			children: [
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "flex flex-wrap items-center gap-2",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(VerdictBadge, { verdict: row.verdict }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LegacyBadge, { verdict: row.legacy })]
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
-					className: "mt-4 text-lg font-medium",
-					children: row.name
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-					className: "mt-1 font-mono text-xs text-muted",
-					children: [
-						"UN ",
-						row.un,
-						" · Class ",
-						row.hazClass || "—",
-						" · ",
-						packFormLabel(row.packForm),
-						" ·",
-						" ",
-						formatKg(row.quantityKg)
-					]
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
-					className: "mt-4 space-y-2 text-sm leading-relaxed",
-					children: row.reasons.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: r }, r))
-				}),
-				row.needs.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-					className: "mt-3 text-sm text-review",
-					children: ["Need: ", row.needs.join(" ")]
-				}) : null
-			]
-		}) : null]
+						]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
+						className: "mt-5",
+						onClick: screen,
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Search, {}), "Evaluate"]
+					})
+				]
+			}),
+			row ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+				className: "rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex flex-wrap items-center gap-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(VerdictBadge, { verdict: row.verdict }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LegacyBadge, { verdict: row.legacy })]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+						className: "mt-4 text-lg font-medium",
+						children: row.name
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: "mt-1 font-mono text-xs text-muted",
+						children: [
+							"UN ",
+							row.un,
+							" · Class ",
+							row.hazClass || "—",
+							" · ",
+							packFormLabel(row.packForm),
+							" ·",
+							" ",
+							formatKg(row.quantityKg)
+						]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+						className: "mt-4 space-y-2 text-sm leading-relaxed",
+						children: row.reasons.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: r }, r))
+					}),
+					row.needs.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: "mt-3 text-sm text-review",
+						children: ["Need: ", row.needs.join(" ")]
+					}) : null
+				]
+			}) : null,
+			row ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LookupSheet, {
+				un: row.un,
+				cls: row.hazClass,
+				name: row.name
+			}) : null
+		]
+	});
+}
+function LookupSheet({ un, cls, name }) {
+	const sheet = sheetFor(un, cls, name);
+	const sections = sheetSections(sheet);
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		className: "rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "font-mono text-[11px] tracking-wide text-accent uppercase",
+				children: [
+					sheet.guide,
+					" · Class ",
+					sheet.cls
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", {
+				className: "mt-2 text-base font-medium",
+				children: ["What can go wrong — UN ", sheet.un]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "mt-1 text-sm text-muted",
+				children: sheet.looksLike
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "mt-4 grid gap-3 md:grid-cols-2",
+				children: sections.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+					className: "text-sm font-medium",
+					children: s.title
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+					className: "mt-1 space-y-1 text-sm text-muted",
+					children: s.items.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: ["— ", t] }, t))
+				})] }, s.title))
+			})
+		]
 	});
 }
 function RulesPanel() {

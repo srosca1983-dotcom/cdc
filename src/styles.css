@@ -42,6 +42,9 @@
   --color-ok-soft: #e3efe8;
   --color-residue: #3e5a70;
   --color-residue-soft: #e4ebf0;
+  --color-reefer: #1f4e79;
+  --color-reefer-soft: #d3e3f2;
+  --color-dg-box: #9b3333;
 
   --radius-xs: 4px;
   --radius-sm: 8px;
@@ -83,6 +86,36 @@
     background: var(--color-bg);
     color: var(--color-fg);
     font-family: var(--font-sans);
+  }
+}
+
+@layer components {
+  .slot-cargo-reefer {
+    background: var(--color-reefer);
+    color: var(--color-primary-foreground);
+  }
+  .slot-cargo-nor {
+    background: color-mix(in oklab, var(--color-reefer) 72%, white);
+    color: var(--color-primary-foreground);
+  }
+  .slot-cargo-dg {
+    background: var(--color-dg-box);
+    color: var(--color-primary-foreground);
+  }
+  /* Split from top-right to bottom-left: reefer blue / DG red. */
+  .slot-cargo-reefer-dg {
+    background: linear-gradient(
+      to bottom left,
+      var(--color-reefer) 0%,
+      var(--color-reefer) 49.5%,
+      var(--color-dg-box) 50.5%,
+      var(--color-dg-box) 100%
+    );
+    color: var(--color-primary-foreground);
+  }
+  .slot-cargo-dry {
+    background: var(--color-surface-2);
+    color: var(--color-ink);
   }
 }
 

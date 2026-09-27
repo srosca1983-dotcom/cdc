@@ -12,7 +12,7 @@ var install_page_default = "<!DOCTYPE html>\n<html lang=\"en\" class=\"device-de
 //#endregion
 //#region \0virtual:grok-og-identity
 var grokOgIdentity = { "site": {
-	"title": "CDC eNOAD Screener",
+	"title": "Cargo and DCM Viewer",
 	"color": "1A2836"
 } };
 //#endregion

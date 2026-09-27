@@ -81,6 +81,15 @@ export function saveCargo(entry: StoredCargo) {
   }
 }
 
+export function clearCargo() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(CARGO_KEY);
+  } catch {
+    /* quota */
+  }
+}
+
 export function loadCargo(): StoredCargo | null {
   if (typeof window === "undefined") return null;
   try {
@@ -88,8 +97,17 @@ export function loadCargo(): StoredCargo | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredCargo;
     if (!parsed?.lines?.length) return null;
+    if (isDemoSource(parsed.sourceName)) {
+      window.localStorage.removeItem(CARGO_KEY);
+      return null;
+    }
     return parsed;
   } catch {
     return null;
   }
+}
+
+/** Old in-app sample files — not a real voyage. */
+export function isDemoSource(name?: string | null): boolean {
+  return /pasha-style-sample|worked-cdc-example|sample-george-ii/i.test(name || "");
 }

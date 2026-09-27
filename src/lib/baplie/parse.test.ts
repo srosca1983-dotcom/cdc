@@ -1,7 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseBaplie, looksLikeBaplie } from "./parse.ts";
-import { SAMPLE_BAPLIE } from "./sample.ts";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseBaplie, looksLikeBaplie, isoReefer } from "./parse.ts";
+import { SAMPLE_BAPLIE, FIXTURE_BAPLIE } from "./sample.ts";
 import { reeferHeatIssues, reeferMotors, heatSensitive } from "./heat.ts";
 import { evaluateManifest } from "../cdc/evaluate.ts";
 import { CONTAINER_OPTIONS, type LineInput } from "../cdc/types.ts";
@@ -36,6 +39,28 @@ UNZ+1+1'
 `;
 
 describe("BAPLIE", () => {
+  it("keeps group-level LOC+11 on following boxes until the next discharge port", () => {
+    const edi = `UNA:+.? '
+UNH+1+BAPLIE:D:95B:UN:SMDG22'
+TDT+20+070W+1++PHK:172:20+++8012487:103:GEORGE II'
+LOC+5+USLGB:139:6'
+LOC+61+USHNL:139:6'
+LOC+11+USHNL:139:6'
+EQD+CN+HNL40000001+45G1:102:5++2+5'
+LOC+147+0180284:139:5'
+EQD+CN+HNL20000001+22G1:102:5++2+5'
+LOC+147+0170284:139:5'
+EQD+CN+SIN40000001+45G1:102:5++2+5'
+LOC+147+0180384:139:5'
+LOC+11+SGSIN:139:6'
+UNT+20+1'
+`;
+    const plan = parseBaplie(edi, "group-pod.edi");
+    assert.equal(plan.boxes.find((b) => b.container === "HNL40000001")?.pod, "USHNL");
+    assert.equal(plan.boxes.find((b) => b.container === "HNL20000001")?.pod, "USHNL");
+    assert.equal(plan.boxes.find((b) => b.container === "SIN40000001")?.pod, "SGSIN");
+  });
+
   it("reads vessel, reefers, DGS and 7-digit stow", () => {
     assert.equal(looksLikeBaplie(SAMPLE_BAPLIE), true);
     const plan = parseBaplie(SAMPLE_BAPLIE, "sample.edi");
@@ -55,6 +80,26 @@ describe("BAPLIE", () => {
     assert.equal(holdRf?.motors, "fwd");
     assert.equal(holdRf?.stow?.bay, 6);
     assert.equal(holdRf?.stow?.onDeck, false);
+  });
+
+  it("reads the vendored 20-box GEORGE II fixture", () => {
+    const file = join(dirname(fileURLToPath(import.meta.url)), "fixtures/george-ii-20.edi");
+    assert.equal(existsSync(file), true);
+    const fromFile = parseBaplie(readFileSync(file, "utf8"), "george-ii-20.edi");
+    const fromExport = parseBaplie(FIXTURE_BAPLIE, "george-ii-20.edi");
+    assert.equal(fromFile.boxes.length, 20);
+    assert.equal(fromExport.boxes.length, 20);
+    assert.ok(fromExport.boxes.some((b) => b.container === "RFRA0000001" && b.reefer && b.operating));
+    assert.ok(fromExport.boxes.some((b) => b.container === "NORA0000005" && b.reefer && !b.operating));
+    assert.ok(fromExport.boxes.some((b) => b.container === "DGPA0000002" && b.stow?.hatch === 5 && b.dg[0]?.un === "1263"));
+    assert.ok(fromExport.boxes.some((b) => b.container === "DGPB0000008" && b.stow?.hatch === 8 && b.dg[0]?.un === "1263"));
+    const forty = fromExport.boxes.find((b) => b.container === "FORTY0000001");
+    const twenty = fromExport.boxes.find((b) => b.container === "TWENT0000001");
+    assert.equal(forty?.stow?.fortyFoot, true);
+    assert.equal(twenty?.stow?.fortyFoot, false);
+    assert.equal(forty?.stow?.hatch, 4);
+    assert.equal(twenty?.stow?.hatch, 4);
+    assert.equal(fromExport.boxes.filter((b) => b.stow).length, 20);
   });
 
   it("applies pending LOC+147 to following EQDs and splits the equipment id", () => {
@@ -201,5 +246,35 @@ UNZ+1+1'
       "0210184",
     );
     assert.equal(nextHatch.length, 0, JSON.stringify(nextHatch));
+  });
+
+  it("counts numeric ISO 4532 / 2230 and ISO on the EQD id as reefers", () => {
+    assert.equal(isoReefer("45R1"), true);
+    assert.equal(isoReefer("22R1"), true);
+    assert.equal(isoReefer("L5R1"), true);
+    assert.equal(isoReefer("4532"), true);
+    assert.equal(isoReefer("2230"), true);
+    assert.equal(isoReefer("45G1"), false);
+    assert.equal(isoReefer("2200"), false);
+    const edi = `UNA:+.? '
+UNB+UNOA:2+PASHA+GEORGEII+260918:1200+1'
+UNH+1+BAPLIE:D:95B:UN:SMDG22'
+BGM+34+T+9'
+EQD+CN+NUMR0000001:4532+++5'
+LOC+147+0180284:139:5'
+TMP+2+-18:CEL'
+EQD+CN+HANR0000002+45G1:102:5++2+5'
+LOC+147+0180484:139:5'
+HAN+RFA'
+EQD+CN+DRY00000003+22G1:102:5++2+5'
+LOC+147+0180684:139:5'
+UNT+20+1'
+UNZ+1+1'
+`;
+    const plan = parseBaplie(edi, "reefers.edi");
+    assert.equal(plan.boxes.find((b) => b.container === "NUMR0000001")?.reefer, true);
+    assert.equal(plan.boxes.find((b) => b.container === "NUMR0000001")?.iso, "4532");
+    assert.equal(plan.boxes.find((b) => b.container === "HANR0000002")?.reefer, true);
+    assert.equal(plan.boxes.find((b) => b.container === "DRY00000003")?.reefer, false);
   });
 });

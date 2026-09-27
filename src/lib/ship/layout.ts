@@ -1,7 +1,9 @@
 import type { LineResult } from "../cdc/types.ts";
 import { isLimitedQty } from "../cdc/limited.ts";
+import type { BapliePlan } from "../baplie/types.ts";
 import { HATCHES, hatchSpec, imdgAllowed, type HatchSpec } from "./george-ii.ts";
-import { containerKey, parseStow, type StowPos } from "./stow.ts";
+import { containerKey, type StowPos } from "./stow.ts";
+import { resolvedStow } from "./segregation.ts";
 
 export interface DgLine {
   line: LineResult;
@@ -33,14 +35,14 @@ export interface ContainerSlot {
   mismatch?: boolean;
 }
 
-export function dgLines(lines: LineResult[]): DgLine[] {
+export function dgLines(lines: LineResult[], plan: BapliePlan | null = null): DgLine[] {
   return lines
     .filter((l) => l.input.un)
-    .map((l) => ({ line: l, stow: parseStow(l.input.stowLoc) }));
+    .map((l) => ({ line: l, stow: resolvedStow(l, plan) }));
 }
 
-export function hatchBuckets(lines: LineResult[]): HatchBucket[] {
-  const all = dgLines(lines);
+export function hatchBuckets(lines: LineResult[], plan: BapliePlan | null = null): HatchBucket[] {
+  const all = dgLines(lines, plan);
   return HATCHES.map((spec) => {
     const mine = all.filter((d) => d.stow?.hatch === spec.id);
     const classes = [...new Set(mine.map((d) => d.line.hazClass).filter(Boolean))].sort();
@@ -59,8 +61,8 @@ export function hatchBuckets(lines: LineResult[]): HatchBucket[] {
   });
 }
 
-export function unstowed(lines: LineResult[]): DgLine[] {
-  return dgLines(lines).filter((d) => !d.stow);
+export function unstowed(lines: LineResult[], plan: BapliePlan | null = null): DgLine[] {
+  return dgLines(lines, plan).filter((d) => !d.stow);
 }
 
 export function containersOnHatch(bucket: HatchBucket): ContainerSlot[] {
